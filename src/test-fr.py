@@ -2,13 +2,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch.nn as nn
 import numpy as np
-# import itertools
 import torch
 import os
 
+from collections import Counter
 from tasks import FreeRecall
-from models import CRPLSTM
-from models import A2C_linear
+from models import CRPLSTM, A2C_linear
 from models import compute_a2c_loss, compute_returns
 from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir
 from vis import plot_learning_curve
@@ -96,6 +95,8 @@ for i in range(n_test):
             order_resp_j = np.where(targ[i] == resp[i][j])[0]
             order[i, j] = int(order_resp_j)
 
+# from collections import Counter
+# Counter(order.reshape(-1))
 
 def lag2index(lag, n_std_items):
     '''map lag to lag_index

@@ -7,8 +7,7 @@ import torch
 import os
 
 from tasks import FreeRecall
-from models import CRPLSTM
-from models import A2C_linear
+from models import CRPLSTM, A2C_linear
 from models import compute_a2c_loss, compute_returns
 from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir
 from vis import plot_learning_curve
@@ -32,7 +31,7 @@ task = FreeRecall(n, reward=reward, penalty=penalty)
 dim_input = task.x_dim
 dim_output = task.x_dim
 lr = 1e-3
-dim_hidden = 4
+dim_hidden = 512
 
 # for dim_hidden in [2 ** k for k in np.arange(4, 10)]:
 

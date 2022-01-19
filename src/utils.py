@@ -46,25 +46,9 @@ def make_log_fig_dir(exp_name, log_root = '../log', fig_root = '../figs'):
         print(f'made fig dir: {fig_path}')
     return log_path, fig_path
 
-# def ignore_warnings():
-#     if not sys.warnoptions:
-#         warnings.simplefilter("ignore")
-#
-#
-# def to_1d_tensor(scalar_list):
-#     return torch.cat(
-#         [s.type(torch.FloatTensor).view(tensor_length(s)) for s in scalar_list]
-#     )
-#
-#
-# def tensor_length(tensor):
-#     if tensor.dim() == 0:
-#         length = 1
-#     elif tensor.dim() > 1:
-#         raise ValueError('length for high dim tensor is undefined')
-#     else:
-#         length = len(tensor)
-#     return length
+def ignore_warnings():
+    if not sys.warnoptions:
+        warnings.simplefilter("ignore")
 
 
 def pickle_save_dict(input_dict, save_path):
