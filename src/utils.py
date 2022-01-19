@@ -34,7 +34,18 @@ def enumerated_product(*args):
     # https://stackoverflow.com/questions/56430745/enumerating-a-tuple-of-indices-with-itertools-product
     yield from zip(product(*(range(len(x)) for x in args)), product(*args))
 
-#
+
+def make_log_fig_dir(exp_name, log_root = '../log', fig_root = '../figs'):
+    log_path = os.path.join(log_root, exp_name)
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+        print(f'made log dir: {log_path}')
+    fig_path = os.path.join(fig_root, exp_name)
+    if not os.path.exists(fig_path):
+        os.makedirs(fig_path)
+        print(f'made fig dir: {fig_path}')
+    return log_path, fig_path
+
 # def ignore_warnings():
 #     if not sys.warnoptions:
 #         warnings.simplefilter("ignore")

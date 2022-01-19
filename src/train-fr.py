@@ -10,34 +10,41 @@ from tasks import FreeRecall
 from models import CRPLSTM
 from models import A2C_linear
 from models import compute_a2c_loss, compute_returns
-from utils import to_sqpth, to_pth, to_np, to_sqnp
+from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir
 from vis import plot_learning_curve
+from stats import compute_stats
 
 sns.set(style='white', palette='colorblind', context='talk')
 seed = 0
 np.random.seed(seed)
 torch.manual_seed(seed)
+log_root = '../log'
+fig_root = '../figs'
 
 # init task
-n = 4
+n = 8
 reward = 1
 penalty = -.5
 tmax = n // 2
 task = FreeRecall(n, reward=reward, penalty=penalty)
 
 # init model
-end_id = task.x_dim
 dim_input = task.x_dim
 dim_output = task.x_dim
-dim_hidden = 32
 lr = 1e-3
+dim_hidden = 4
+
+# for dim_hidden in [2 ** k for k in np.arange(4, 10)]:
+
+# make log dirs
+exp_name = f'n-{n}-h-{dim_hidden}'
+log_path, fig_path = make_log_fig_dir(exp_name)
 
 # testing
 agent = CRPLSTM(dim_input, dim_hidden, dim_output, 0, use_ctx=False)
 optimizer = torch.optim.Adam(agent.parameters(), lr=lr)
 
-
-n_epochs = 50001
+n_epochs = 100001
 log_r = np.zeros((n_epochs, tmax))
 log_a = np.zeros((n_epochs, tmax))
 log_std_items = np.zeros((n_epochs, task.n_std))
@@ -61,7 +68,7 @@ for i in range(n_epochs):
         [_, _, _, h_t, c_t], _ = agent.forward(x_t.view(1, 1, -1), h_t, c_t)
 
     # recall phase
-    empty_input = torch.zeros(dim_input).view(1, 1, -1)
+    empty_input = torch.zeros(task.x_dim).view(1, 1, -1)
     for t in range(tmax):
         [a_t, pi_a_t, v_t, h_t, c_t], _ = agent.forward(empty_input, h_t, c_t)
         r_t = task.get_reward(a_t)
@@ -86,18 +93,16 @@ for i in range(n_epochs):
 
     if i % 100 == 0:
         print('%3d | r = %.4f' % (i, np.mean(log_r[i])))
+    if i % 1000 == 0:
+        '''save weights'''
+        fname = f'wts-{i}.pth'
+        torch.save(agent.state_dict(), os.path.join(log_path, fname))
 
+'''figures'''
+
+# plot the learning curves
 w_size = 20
-plot_learning_curve(np.mean(log_r,axis=1), window_size=w_size, ylabel='avg reward')
-plot_learning_curve(log_loss_actor, window_size=w_size, ylabel='loss actor')
-plot_learning_curve(log_loss_critic, window_size=w_size, ylabel='loss critic')
-
-# log_a[0]
-#
-# log_std_items[0]
-from collections import Counter
-print(Counter(log_a.reshape(-1)))
-print(Counter(log_std_items.reshape(-1)))
-# np.unique(log_a)
-# np.unique(log_std_items)
-# np.mean(log_r)
+f, ax = plot_learning_curve(np.mean(log_r,axis=1), window_size=w_size, ylabel='avg reward')
+f.savefig(os.path.join(fig_path, 'r.png'))
+f, ax = plot_learning_curve(log_loss_actor, window_size=w_size, ylabel='loss actor')
+f, ax = plot_learning_curve(log_loss_critic, window_size=w_size, ylabel='loss critic')
