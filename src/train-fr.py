@@ -21,32 +21,33 @@ log_root = '../log'
 fig_root = '../figs'
 
 # init task
-n = 8
+n_std = 4
+n = 10
 reward = 1
 penalty = -.5
 tmax = n // 2
-task = FreeRecall(n, reward=reward, penalty=penalty)
+task = FreeRecall(n_std=n_std, n=n, reward=reward, penalty=penalty)
 
 # init model
 dim_input = task.x_dim
 dim_output = task.x_dim
 lr = 1e-3
-dim_hidden = 512
+dim_hidden = 128
 
 # for dim_hidden in [2 ** k for k in np.arange(4, 10)]:
 
 # make log dirs
-exp_name = f'n-{n}-h-{dim_hidden}'
+exp_name = f'n-{n}-n_std-{n_std}/-h-{dim_hidden}'
 log_path, fig_path = make_log_fig_dir(exp_name)
 
 # testing
 agent = CRPLSTM(dim_input, dim_hidden, dim_output, 0, use_ctx=False)
 optimizer = torch.optim.Adam(agent.parameters(), lr=lr)
 
-n_epochs = 100001
+n_epochs = 10001
 log_r = np.zeros((n_epochs, tmax))
 log_a = np.zeros((n_epochs, tmax))
-log_std_items = np.zeros((n_epochs, task.n_std))
+log_std_items = np.zeros((n_epochs, n_std))
 log_loss_actor = np.zeros((n_epochs, ))
 log_loss_critic = np.zeros((n_epochs, ))
 for i in range(n_epochs):

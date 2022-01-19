@@ -9,11 +9,11 @@ class FreeRecall():
     learn n/2 (out of n) items during study, and then recall during test
     '''
 
-    def __init__(self, n, reward=1, penalty=-1):
-        assert n % 2 == 0 and n > 1, 'n must be even'
+    def __init__(self, n_std=8, n=50, reward=1, penalty=-1):
+        assert n > n_std > 1, 'n words > n study items > 1'
         assert reward > 0 and penalty <= 0, 'reward/penalty must be pos/neg'
         self.n = n
-        self.n_std = n // 2
+        self.n_std = n_std
         self.reward = reward
         self.penalty = penalty
         # init helpers
@@ -69,8 +69,9 @@ if __name__ == "__main__":
     import seaborn as sns
     sns.set(style='white', palette='colorblind', context='poster')
     np.random.seed()
-    n = 4
-    task = FreeRecall(n)
+    n_std = 3
+    n = 10
+    task = FreeRecall(n_std, n)
     X = task.sample()
     # print(task.stimuli)
     print(task.studied_item_ids)

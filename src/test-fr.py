@@ -22,10 +22,11 @@ fig_root = '../figs'
 
 # init task
 n = 8
+n_std = 4
 reward = 1
 penalty = -.5
 tmax = n // 2
-task = FreeRecall(n, reward=reward, penalty=penalty)
+task = FreeRecall(n_std=n_std, n=n, reward=reward, penalty=penalty)
 
 # init model
 lr = 1e-3
@@ -50,7 +51,7 @@ agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 n_test = 1000
 log_r = np.zeros((n_test, tmax))
 log_a = np.zeros((n_test, tmax))
-log_std_items = np.zeros((n_test, task.n_std))
+log_std_items = np.zeros((n_test, n_std))
 for i in range(n_test):
     # re-sample studied items
     X = task.sample(to_pytorch=True)
@@ -114,8 +115,8 @@ def lag2index(lag, n_std_items):
     return lag_index - 1
 
 # compute the tally for actual and possible responses
-tally = np.zeros((n_test, (task.n_std - 1)* 2))
-tally_poss = np.zeros((n_test, (task.n_std - 1)* 2))
+tally = np.zeros((n_test, (n_std - 1)* 2))
+tally_poss = np.zeros((n_test, (n_std - 1)* 2))
 lags = []
 for i in range(n_test):
     order_i = order[i]
@@ -123,16 +124,16 @@ for i in range(n_test):
     for j in range(len(order_i_rmnan) - 1):
         lag = int(order_i_rmnan[j+1] -  order_i_rmnan[j])
         if lag != 0:
-            lag_index = lag2index(lag, task.n_std)
+            lag_index = lag2index(lag, n_std)
             # increment the count of the corresponding lag index
             tally[i, lag_index] +=1
             lags.append(lag)
 
     for j in range(len(order_i_rmnan) - 1):
-        for o in range(task.n_std):
+        for o in range(n_std):
             lag_poss = int(o - order_i_rmnan[j])
             if lag_poss != 0:
-                lag_index = lag2index(lag_poss, task.n_std)
+                lag_index = lag2index(lag_poss, n_std)
                 tally_poss[i, lag_index] +=1
 
 assert np.all(tally_poss >= tally), 'possible count must >= actual count'
@@ -148,13 +149,13 @@ crp = np.divide(tally, tally_poss, out=np.zeros_like(tally), where=tally_poss!=0
 
 
 p_mu, p_se = compute_stats(crp, axis=0)
-xticklabels = np.concatenate((np.arange(-(task.n_std - 1), 0), np.arange(1, task.n_std)))
+xticklabels = np.concatenate((np.arange(-(n_std - 1), 0), np.arange(1, n_std)))
 
 f, ax = plt.subplots(1,1, figsize=(6,4))
-ax.errorbar(x=np.arange(task.n_std - 1), y=p_mu[:task.n_std - 1], yerr = p_se[:task.n_std - 1],color='k')
-ax.errorbar(x=np.arange(task.n_std - 1) + (task.n_std - 1), y=p_mu[-(task.n_std - 1):], yerr = p_se[-(task.n_std - 1):], color='k')
+ax.errorbar(x=np.arange(n_std - 1), y=p_mu[:n_std - 1], yerr = p_se[:n_std - 1],color='k')
+ax.errorbar(x=np.arange(n_std - 1) + (n_std - 1), y=p_mu[-(n_std - 1):], yerr = p_se[-(n_std - 1):], color='k')
 ax.set_ylim([0, None])
-ax.set_xticks(np.arange((task.n_std - 1)*2))
+ax.set_xticks(np.arange((n_std - 1)*2))
 ax.set_xticklabels(xticklabels)
 ax.set_xlabel('Lag')
 ax.set_ylabel('p')
