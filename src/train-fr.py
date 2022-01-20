@@ -21,32 +21,31 @@ log_root = '../log'
 fig_root = '../figs'
 
 # init task
-n_std = 4
-n = 10
+n = 20
+n_std = 6
 reward = 1
 penalty = -.5
-tmax = n // 2
 task = FreeRecall(n_std=n_std, n=n, reward=reward, penalty=penalty)
 
 # init model
 dim_input = task.x_dim
 dim_output = task.x_dim
 lr = 1e-3
-dim_hidden = 128
+dim_hidden = 512
 
 # for dim_hidden in [2 ** k for k in np.arange(4, 10)]:
 
 # make log dirs
-exp_name = f'n-{n}-n_std-{n_std}/-h-{dim_hidden}'
+exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}'
 log_path, fig_path = make_log_fig_dir(exp_name)
 
 # testing
 agent = CRPLSTM(dim_input, dim_hidden, dim_output, 0, use_ctx=False)
 optimizer = torch.optim.Adam(agent.parameters(), lr=lr)
 
-n_epochs = 10001
-log_r = np.zeros((n_epochs, tmax))
-log_a = np.zeros((n_epochs, tmax))
+n_epochs = 300001
+log_r = np.zeros((n_epochs, n_std))
+log_a = np.zeros((n_epochs, n_std))
 log_std_items = np.zeros((n_epochs, n_std))
 log_loss_actor = np.zeros((n_epochs, ))
 log_loss_critic = np.zeros((n_epochs, ))
@@ -69,7 +68,7 @@ for i in range(n_epochs):
 
     # recall phase
     empty_input = torch.zeros(task.x_dim).view(1, 1, -1)
-    for t in range(tmax):
+    for t in range(n_std):
         [a_t, pi_a_t, v_t, h_t, c_t], _ = agent.forward(empty_input, h_t, c_t)
         r_t = task.get_reward(a_t)
         # compute loss
@@ -91,9 +90,9 @@ for i in range(n_epochs):
     loss.backward()
     optimizer.step()
 
-    if i % 100 == 0:
-        print('%3d | r = %.4f' % (i, np.mean(log_r[i])))
     if i % 1000 == 0:
+        print('%3d | r = %.4f' % (i, np.mean(log_r[i])))
+    if i % 10000 == 0:
         '''save weights'''
         fname = f'wts-{i}.pth'
         torch.save(agent.state_dict(), os.path.join(log_path, fname))

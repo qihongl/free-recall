@@ -9,9 +9,9 @@ from collections import Counter
 from tasks import FreeRecall
 from models import CRPLSTM, A2C_linear
 from models import compute_a2c_loss, compute_returns
-from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir
+from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, rm_dup
+from stats import compute_stats, compute_recall_order, lag2index
 from vis import plot_learning_curve
-from stats import compute_stats
 
 sns.set(style='white', palette='colorblind', context='talk')
 seed = 0
@@ -21,11 +21,10 @@ log_root = '../log'
 fig_root = '../figs'
 
 # init task
-n = 8
-n_std = 4
+n = 20
+n_std = 6
 reward = 1
 penalty = -.5
-tmax = n // 2
 task = FreeRecall(n_std=n_std, n=n, reward=reward, penalty=penalty)
 
 # init model
@@ -38,9 +37,9 @@ dim_hidden = 512
 print(dim_hidden)
 
 # make log dirs
-epoch_trained = 100000
-exp_name = f'n-{n}-h-{dim_hidden}'
-log_path, fig_path = make_log_fig_dir(exp_name)
+epoch_trained = 240000
+exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}'
+log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
 # reload the weights
 fname = f'wts-{epoch_trained}.pth'
@@ -48,9 +47,9 @@ agent = CRPLSTM(dim_input, dim_hidden, dim_output, 0, use_ctx=False)
 agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 
 # testing
-n_test = 1000
-log_r = np.zeros((n_test, tmax))
-log_a = np.zeros((n_test, tmax))
+n_test = 3000
+log_r = np.zeros((n_test, n_std))
+log_a = np.zeros((n_test, n_std))
 log_std_items = np.zeros((n_test, n_std))
 for i in range(n_test):
     # re-sample studied items
@@ -68,7 +67,7 @@ for i in range(n_test):
 
     # recall phase
     empty_input = torch.zeros(task.x_dim).view(1, 1, -1)
-    for t in range(tmax):
+    for t in range(n_std):
         [a_t, pi_a_t, v_t, h_t, c_t], _ = agent.forward(empty_input, h_t, c_t)
         r_t = task.get_reward(a_t)
         # log
@@ -85,34 +84,10 @@ for i in range(n_test):
 # select the last n_test trials to analyze
 targ = log_std_items
 resp = log_a
-order = np.full((n_test, tmax), np.nan)
-# loop over all trials
-for i in range(n_test):
-    # for each trial, loop over time
-    for j in range(tmax):
-        # if recall a targ
-        if resp[i][j] in targ[i]:
-            # figure out the true order
-            order_resp_j = np.where(targ[i] == resp[i][j])[0]
-            order[i, j] = int(order_resp_j)
 
-# from collections import Counter
-# Counter(order.reshape(-1))
 
-def lag2index(lag, n_std_items):
-    '''map lag to lag_index
-    e.g.
-    if n stud items is 4, then max lag is 3 (item 1 -> item 4),
-    so all lags are -3, -2, -1, +1, +2, +3
-    and lag_index are 0, 1, 2, 3, 4, 5
-    '''
-    if lag == 0:
-        return None
-    if lag > 0:
-        lag_index = lag + n_std_items - 1
-    else:
-        lag_index = lag + n_std_items
-    return lag_index - 1
+# compute the recall order given target and responses
+order = compute_recall_order(targ, resp)
 
 # compute the tally for actual and possible responses
 tally = np.zeros((n_test, (n_std - 1)* 2))
@@ -120,7 +95,9 @@ tally_poss = np.zeros((n_test, (n_std - 1)* 2))
 lags = []
 for i in range(n_test):
     order_i = order[i]
+    # order_i_rmnan = order_i[~np.isnan(order_i)]
     order_i_rmnan = order_i[~np.isnan(order_i)]
+    order_i_rmnan = rm_dup(order_i_rmnan)
     for j in range(len(order_i_rmnan) - 1):
         lag = int(order_i_rmnan[j+1] -  order_i_rmnan[j])
         if lag != 0:
@@ -141,13 +118,6 @@ assert np.all(tally_poss >= tally), 'possible count must >= actual count'
 crp = np.divide(tally, tally_poss, out=np.zeros_like(tally), where=tally_poss!=0)
 # crp = tally / tally.sum(axis=1)[:,None]
 
-# for n_std_items in [4]:
-# # n_std_items = 6
-#     temp = [- i-1 for i in np.arange(n_std_items-1)][::-1] + [i+1 for i in range(n_std_items-1)]
-#     print([lag2index(i, n_std_items) for i in temp])
-#     print(lag2index(0, n_std_items))
-
-
 p_mu, p_se = compute_stats(crp, axis=0)
 xticklabels = np.concatenate((np.arange(-(n_std - 1), 0), np.arange(1, n_std)))
 
@@ -163,6 +133,20 @@ ax.set_title('Conditional response probability')
 sns.despine()
 
 
-# from collections import Counter
-# counter = Counter(lags)
-# sorted(counter.items())
+# plot the serial position curve
+unique_recalls = np.concatenate([np.unique(order[i]) for i in range(n_test)])
+counter = Counter(unique_recalls)
+
+spc_x = range(n_std)
+spc_y = [counter[i] / n_test for i in range(n_std)]
+f, ax = plt.subplots(1,1, figsize=(6, 4))
+ax.plot(spc_y)
+# ax.set_ylim([None, 1])
+ax.set_xlabel('Position')
+ax.set_ylabel('p')
+ax.set_title('Recall probability')
+sns.despine()
+
+
+p_lure = np.sum(np.isnan(order)) / len(order.reshape(-1))
+print(f'Probability of lure recall is {p_lure}')
