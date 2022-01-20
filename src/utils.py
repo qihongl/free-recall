@@ -35,15 +35,30 @@ def enumerated_product(*args):
     yield from zip(product(*(range(len(x)) for x in args)), product(*args))
 
 
-def make_log_fig_dir(exp_name, log_root = '../log', fig_root = '../figs'):
+def rm_dup(seq):
+    # https://stackoverflow.com/questions/480214/how-do-you-remove-duplicates-from-a-list-whilst-preserving-order
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
+
+
+def make_log_fig_dir(exp_name, log_root = '../log', fig_root = '../figs', makedirs=True):
     log_path = os.path.join(log_root, exp_name)
+
     if not os.path.exists(log_path):
-        os.makedirs(log_path)
-        print(f'made log dir: {log_path}')
+        if makedirs:
+            os.makedirs(log_path)
+            print(f'made log dir: {log_path}')
+        else:
+            print(f'log dir not found: {log_path}')
+
     fig_path = os.path.join(fig_root, exp_name)
-    if not os.path.exists(fig_path):
-        os.makedirs(fig_path)
-        print(f'made fig dir: {fig_path}')
+    if not os.path.exists(fig_path) and makedirs:
+        if makedirs:
+            os.makedirs(fig_path)
+            print(f'made fig dir: {fig_path}')
+        else:
+            print(f'fig dir not found: {log_path}')
     return log_path, fig_path
 
 def ignore_warnings():
