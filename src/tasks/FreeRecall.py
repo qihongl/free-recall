@@ -46,7 +46,7 @@ class FreeRecall():
             X = to_pth(X)
         return X
 
-    def get_reward(self, recalled_id):
+    def get_reward(self, recalled_id, penalize_repeat=True):
         '''
         return reward/penalty if the model recalled some studied item / lure
         '''
@@ -55,7 +55,10 @@ class FreeRecall():
 
         if recalled_id in to_pth(self.studied_item_ids):
             if recalled_id in self.recalled_item_id:
-                return to_pth(0)
+                if penalize_repeat:
+                    return to_pth(self.penalty)
+                else:
+                    return to_pth(0)
             else:
                 self.recalled_item_id.append(recalled_id)
                 return to_pth(self.reward)
@@ -69,8 +72,8 @@ if __name__ == "__main__":
     import seaborn as sns
     sns.set(style='white', palette='colorblind', context='poster')
     np.random.seed()
-    n_std = 3
-    n = 10
+    n_std = 5
+    n = 30
     task = FreeRecall(n_std, n)
     X = task.sample()
     # print(task.stimuli)
