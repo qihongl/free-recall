@@ -4,6 +4,7 @@ import torch.nn as nn
 import numpy as np
 import argparse
 import torch
+import time
 import os
 
 from tasks import FreeRecall
@@ -22,7 +23,7 @@ parser.add_argument('--n', default=21, type=int)
 parser.add_argument('--n_std', default=6, type=int)
 parser.add_argument('--dim_hidden', default=512, type=int)
 parser.add_argument('--lr', default=1e-3, type=float)
-parser.add_argument('--n_epochs', default=300001, type=int)
+parser.add_argument('--n_epochs', default=200001, type=int)
 parser.add_argument('--reward', default=1, type=int)
 parser.add_argument('--penalty', default=-.5, type=float)
 parser.add_argument('--penalize_repeat', default=1, type=int)
@@ -53,6 +54,7 @@ log_std_items = np.zeros((p.n_epochs, p.n_std))
 log_loss_actor = np.zeros((p.n_epochs, ))
 log_loss_critic = np.zeros((p.n_epochs, ))
 for i in range(p.n_epochs):
+    time_s = time.time()
     # re-sample studied items
     X = task.sample(to_pytorch=True)
     log_std_items[i] = task.studied_item_ids
@@ -88,12 +90,15 @@ for i in range(p.n_epochs):
     loss.backward()
     optimizer.step()
 
-    if i % 1000 == 0:
-        print('%3d | r = %.4f' % (i, np.mean(log_r[i])))
+    # save weights
     if i % 10000 == 0:
         '''save weights'''
         fname = f'wts-{i}.pth'
         torch.save(agent.state_dict(), os.path.join(log_path, fname))
+    time_took = time.time() - time_s
+    if i % 1000 == 0:
+        print('%3d | r = %.4f, loss-a = %.4f, loss-c = %.4f, time = %.2f sec' % (
+        i, np.mean(log_r[i]), log_loss_actor[i], log_loss_critic[i], time_took))
 
 '''figures'''
 # plot the learning curves
