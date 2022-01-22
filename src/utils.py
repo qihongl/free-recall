@@ -43,6 +43,8 @@ def enumerated_product(*args):
     # https://stackoverflow.com/questions/56430745/enumerating-a-tuple-of-indices-with-itertools-product
     yield from zip(product(*(range(len(x)) for x in args)), product(*args))
 
+def estimated_run_time(time_took_per_epoch, n_epochs):
+    return time_took_per_epoch * n_epochs / 3600
 
 def rm_dup(seq):
     # https://stackoverflow.com/questions/480214/how-do-you-remove-duplicates-from-a-list-whilst-preserving-order

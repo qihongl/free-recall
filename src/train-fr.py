@@ -10,7 +10,7 @@ import os
 from tasks import FreeRecall
 from models import CRPLSTM, A2C_linear
 from models import compute_a2c_loss, compute_returns
-from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir
+from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, estimated_run_time
 from vis import plot_learning_curve
 from stats import compute_stats
 
@@ -23,7 +23,7 @@ parser.add_argument('--n', default=21, type=int)
 parser.add_argument('--n_std', default=6, type=int)
 parser.add_argument('--dim_hidden', default=512, type=int)
 parser.add_argument('--lr', default=1e-3, type=float)
-parser.add_argument('--n_epochs', default=200001, type=int)
+parser.add_argument('--n_epochs', default=300001, type=int)
 parser.add_argument('--reward', default=1, type=int)
 parser.add_argument('--penalty', default=-.5, type=float)
 parser.add_argument('--penalize_repeat', default=1, type=int)
@@ -95,7 +95,11 @@ for i in range(p.n_epochs):
         '''save weights'''
         fname = f'wts-{i}.pth'
         torch.save(agent.state_dict(), os.path.join(log_path, fname))
+    # compute ert
     time_took = time.time() - time_s
+    if i == 0:
+        ert = estimated_run_time(time_took, p.n_epochs)
+        print('Estimated run time = %.2f hours' % (ert))
     if i % 1000 == 0:
         print('%3d | r = %.4f, loss-a = %.4f, loss-c = %.4f, time = %.2f sec' % (
         i, np.mean(log_r[i]), log_loss_actor[i], log_loss_critic[i], time_took))
