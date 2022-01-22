@@ -13,7 +13,7 @@ for subj_id in {0..3}
 do
    for dim_hidden in 64 512 2048
    do
-         sbatch train-model.sh \
+         sbatch cluster-train-fr.sh \
          ${exp_name} ${subj_id} ${n} ${n_std} ${dim_hidden} \
          ${lr} ${n_epochs} ${reward} ${penalty} ${penalize_repeat}
    done
