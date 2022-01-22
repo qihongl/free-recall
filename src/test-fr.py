@@ -14,40 +14,41 @@ from stats import compute_stats, compute_recall_order, lag2index
 from vis import plot_learning_curve
 
 sns.set(style='white', palette='colorblind', context='talk')
-seed = 0
-np.random.seed(seed)
-torch.manual_seed(seed)
-log_root = '../log'
-fig_root = '../figs'
+subj_id = 0
+np.random.seed(subj_id)
+torch.manual_seed(subj_id)
 
 # init task
 n = 20
 n_std = 6
 reward = 1
 penalty = -.5
-task = FreeRecall(n_std=n_std, n=n, reward=reward, penalty=penalty)
-
+penalize_repeat = True
+task = FreeRecall(
+    n_std=n_std, n=n, reward=reward, penalty=penalty,
+    penalize_repeat=penalize_repeat
+)
 # init model
 lr = 1e-3
+dim_hidden = 512
 dim_input = task.x_dim
 dim_output = task.x_dim
-dim_hidden = 512
 
 # for dim_hidden in [2 ** k for k in np.arange(4, 10)]:
 print(dim_hidden)
 
 # make log dirs
-epoch_trained = 240000
-exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}'
+epoch_trained = 200000
+exp_name = f'n-{p.n}-n_std-{p.n_std}/h-{p.dim_hidden}/sub-{p.subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
 # reload the weights
 fname = f'wts-{epoch_trained}.pth'
-agent = CRPLSTM(dim_input, dim_hidden, dim_output, 0, use_ctx=False)
+agent = CRPLSTM(dim_input, dim_hidden, dim_output)
 agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 
 # testing
-n_test = 3000
+n_test = 2000
 log_r = np.zeros((n_test, n_std))
 log_a = np.zeros((n_test, n_std))
 log_std_items = np.zeros((n_test, n_std))
@@ -55,13 +56,8 @@ for i in range(n_test):
     # re-sample studied items
     X = task.sample(to_pytorch=True)
     log_std_items[i] = task.studied_item_ids
-
-    # reset init state
-    h_0 = torch.zeros(1, 1, dim_hidden)
-    c_0 = torch.zeros(1, 1, dim_hidden)
-    h_t, c_t = h_0, c_0
-
     # study phase
+    h_t, c_t = agent.get_zero_states()
     for t, x_t in enumerate(X):
         [_, _, _, h_t, c_t], _ = agent.forward(x_t.view(1, 1, -1), h_t, c_t)
 

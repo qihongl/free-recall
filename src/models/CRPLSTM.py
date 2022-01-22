@@ -106,9 +106,14 @@ class CRPLSTM(nn.Module):
             prob_a_t, v_t = None, None
         return a_t, prob_a_t, v_t
 
-    def get_init_states(self, scale=.1):
+    def get_random_init_states(self, scale=.1):
         h_0 = torch.randn(1, 1, self.hidden_dim) * scale
         c_0 = torch.randn(1, 1, self.hidden_dim) * scale
+        return h_0, c_0
+
+    def get_zero_states(self):
+        h_0 = torch.zeros(1, 1, self.hidden_dim)
+        c_0 = torch.zeros(1, 1, self.hidden_dim)
         return h_0, c_0
 
 
