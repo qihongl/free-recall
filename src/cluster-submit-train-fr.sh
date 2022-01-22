@@ -16,7 +16,7 @@ do
      do
          sbatch cluster-train-fr.sh \
          ${exp_name} ${subj_id} ${n} ${n_std} ${dim_hidden} \
-         ${lr} ${n_epochs}
+         ${lr} ${n_epochs} ${penalize_repeat}
        done
    done
 done
