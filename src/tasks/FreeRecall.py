@@ -1,5 +1,5 @@
 import numpy as np
-from utils import to_pth
+from utils import to_pth, to_np
 
 # import pdb
 
@@ -57,14 +57,14 @@ class FreeRecall():
         if self.studied_item_ids is None:
             raise ValueError('studied_item_ids is none, call sample() first' )
 
-        if recalled_id in to_pth(self.studied_item_ids):
-            if recalled_id in self.recalled_item_id:
+        if to_np(recalled_id) in self.studied_item_ids:
+            if to_np(recalled_id) in self.recalled_item_id:
                 if self.penalize_repeat:
                     return to_pth(self.penalty)
                 else:
                     return to_pth(0)
             else:
-                self.recalled_item_id.append(recalled_id)
+                self.recalled_item_id.append(to_np(recalled_id))
                 return to_pth(self.reward)
         return to_pth(self.penalty)
 
