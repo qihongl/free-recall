@@ -9,13 +9,14 @@ class FreeRecall():
     learn n/2 (out of n) items during study, and then recall during test
     '''
 
-    def __init__(self, n_std=8, n=50, reward=1, penalty=-1):
+    def __init__(self, n_std=8, n=50, reward=1, penalty=-1, penalize_repeat=True):
         assert n > n_std > 1, 'n words > n study items > 1'
         assert reward > 0 and penalty <= 0, 'reward/penalty must be pos/neg'
         self.n = n
         self.n_std = n_std
         self.reward = reward
         self.penalty = penalty
+        self.penalize_repeat = penalize_repeat
         # init helpers
         self._init_stimuli()
 
@@ -27,6 +28,9 @@ class FreeRecall():
             raise NotImplementedError()
         # prealloc studied ids
         self.studied_item_ids = None
+
+    def set_penalize_repeat(self, penalize_repeat):
+        self.penalize_repeat = penalize_repeat
 
     def sample(self, to_pytorch=False):
         '''
@@ -46,7 +50,7 @@ class FreeRecall():
             X = to_pth(X)
         return X
 
-    def get_reward(self, recalled_id, penalize_repeat=True):
+    def get_reward(self, recalled_id):
         '''
         return reward/penalty if the model recalled some studied item / lure
         '''
@@ -55,7 +59,7 @@ class FreeRecall():
 
         if recalled_id in to_pth(self.studied_item_ids):
             if recalled_id in self.recalled_item_id:
-                if penalize_repeat:
+                if self.penalize_repeat:
                     return to_pth(self.penalty)
                 else:
                     return to_pth(0)
