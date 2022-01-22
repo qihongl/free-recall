@@ -1,8 +1,6 @@
 #!/bin/bash
 
 exp_name=free-recall
-reward=1
-penalty=-.5
 penalize_repeat=1
 
 lr=1e-3
@@ -18,7 +16,7 @@ do
      do
          sbatch cluster-train-fr.sh \
          ${exp_name} ${subj_id} ${n} ${n_std} ${dim_hidden} \
-         ${lr} ${n_epochs} ${reward} ${penalty} ${penalize_repeat}
+         ${lr} ${n_epochs}
        done
    done
 done
