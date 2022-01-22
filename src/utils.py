@@ -6,10 +6,19 @@ import pickle
 import numpy as np
 
 from itertools import product
-# from scipy.stats import sem
-# from torch.nn.functional import smooth_l1_loss
-# from copy import deepcopy
 
+
+HOST_NAME = os.popen('hostname').read()
+if 'della5' in HOST_NAME:
+    LOG_ROOT = '/tigress/qlu/logs/free-recall/log'
+    FIG_ROOT = '/tigress/qlu/logs/free-recall/figs'
+else:
+    LOG_ROOT = '../log'
+    FIG_ROOT = '../figs'
+
+print(f'Host  = {HOST_NAME}')
+print(f'LOG_ROOT = {LOG_ROOT}')
+print(f'FIG_ROOT = {FIG_ROOT}')
 
 eps = np.finfo(np.float32).eps.item()
 
@@ -42,9 +51,8 @@ def rm_dup(seq):
     return [x for x in seq if not (x in seen or seen_add(x))]
 
 
-def make_log_fig_dir(exp_name, log_root = '../log', fig_root = '../figs', makedirs=True):
+def make_log_fig_dir(exp_name, log_root=LOG_ROOT, fig_root=FIG_ROOT, makedirs=True):
     log_path = os.path.join(log_root, exp_name)
-
     if not os.path.exists(log_path):
         if makedirs:
             os.makedirs(log_path)
