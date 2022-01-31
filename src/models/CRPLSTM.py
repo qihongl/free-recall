@@ -5,10 +5,10 @@ context input is added to the linear layer of A2C
 import torch
 import torch.nn as nn
 from models.A2C import A2C_linear
-
+from models._rl_helpers import pick_action
 
 # constants
-N_GATES = 4
+N_GATES = 3
 # output format is either discrete (e.g. action selection) or continuous
 OUTPUT_FORMAT = ['discrete', 'continuous']
 
@@ -59,7 +59,9 @@ class CRPLSTM(nn.Module):
             elif 'bias' in name:
                 torch.nn.init.constant_(wts, 0)
 
-    def forward(self, x_t, h, c, context_t=None):
+    def forward(self, x_t, hc, context_t=None):
+        x_t = x_t.view(1, 1, -1)
+        h, c = hc
         # unpack activity
         h = h.view(h.size(1), -1)
         c = c.view(c.size(1), -1)
@@ -73,8 +75,7 @@ class CRPLSTM(nn.Module):
         # split input(write) gate, forget gate, output(read) gate
         f_t = gates[:, :self.hidden_dim]
         i_t = gates[:, self.hidden_dim:2 * self.hidden_dim]
-        o_t = gates[:, 2 * self.hidden_dim:3 * self.hidden_dim]
-        r_t = gates[:, -self.hidden_dim:]
+        o_t = gates[:, -self.hidden_dim:]
         # stuff to be written to cell state
         c_t_new = preact[:, N_GATES * self.hidden_dim:].tanh()
         # new cell state = gated(prev_c) + gated(new_stuff)
@@ -87,8 +88,8 @@ class CRPLSTM(nn.Module):
         h_t = h_t.view(1, h_t.size(0), -1)
         c_t = c_t.view(1, c_t.size(0), -1)
         # fetch activity
-        output = [a_t, prob_a_t, v_t, h_t, c_t]
-        cache = [f_t, i_t, o_t, r_t]
+        output = [a_t, prob_a_t, v_t, [h_t, c_t]]
+        cache = [f_t, i_t, o_t]
         return output, cache
 
     def get_output(self, h_t):
@@ -115,23 +116,3 @@ class CRPLSTM(nn.Module):
         h_0 = torch.zeros(1, 1, self.hidden_dim)
         c_0 = torch.zeros(1, 1, self.hidden_dim)
         return h_0, c_0
-
-
-def pick_action(action_distribution):
-    """action selection by sampling from a multinomial.
-
-    Parameters
-    ----------
-    action_distribution : 1d torch.tensor
-        action distribution, pi(a|s)
-
-    Returns
-    -------
-    torch.tensor(int), torch.tensor(float)
-        sampled action, log_prob(sampled action)
-
-    """
-    m = torch.distributions.Categorical(action_distribution)
-    a_t = m.sample()
-    log_prob_a_t = m.log_prob(a_t)
-    return a_t, log_prob_a_t

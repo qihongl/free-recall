@@ -106,3 +106,24 @@ def compute_a2c_loss(probs, values, returns):
     loss_policy = torch.stack(policy_grads).sum()
     loss_value = torch.stack(value_losses).sum()
     return loss_policy, loss_value
+
+
+
+def pick_action(action_distribution):
+    """action selection by sampling from a multinomial.
+
+    Parameters
+    ----------
+    action_distribution : 1d torch.tensor
+        action distribution, pi(a|s)
+
+    Returns
+    -------
+    torch.tensor(int), torch.tensor(float)
+        sampled action, log_prob(sampled action)
+
+    """
+    m = torch.distributions.Categorical(action_distribution)
+    a_t = m.sample()
+    log_prob_a_t = m.log_prob(a_t)
+    return a_t, log_prob_a_t

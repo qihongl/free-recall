@@ -7,7 +7,8 @@ import os
 
 from collections import Counter
 from tasks import FreeRecall
-from models import CRPLSTM, A2C_linear
+# from models import CRPLSTM as Agent
+from models import GRU as Agent
 from models import compute_a2c_loss, compute_returns
 from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, rm_dup
 from stats import compute_stats, compute_recall_order, lag2index
@@ -19,7 +20,7 @@ np.random.seed(subj_id)
 torch.manual_seed(subj_id)
 
 # init task
-n = 20
+n = 13
 n_std = 6
 reward = 1
 penalty = -.5
@@ -30,21 +31,21 @@ task = FreeRecall(
 )
 # init model
 lr = 1e-3
-dim_hidden = 512
+dim_hidden = 256
 dim_input = task.x_dim
 dim_output = task.x_dim
 
-# for dim_hidden in [2 ** k for k in np.arange(4, 10)]:
-print(dim_hidden)
+# for dim_hidden in [64, 512]:
+#     print(dim_hidden)
 
 # make log dirs
-epoch_trained = 200000
-exp_name = f'n-{p.n}-n_std-{p.n_std}/h-{p.dim_hidden}/sub-{p.subj_id}'
+epoch_trained = 50000
+exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
 # reload the weights
 fname = f'wts-{epoch_trained}.pth'
-agent = CRPLSTM(dim_input, dim_hidden, dim_output)
+agent = Agent(dim_input, dim_hidden, dim_output)
 agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 
 # testing
@@ -57,14 +58,14 @@ for i in range(n_test):
     X = task.sample(to_pytorch=True)
     log_std_items[i] = task.studied_item_ids
     # study phase
-    h_t, c_t = agent.get_zero_states()
+    hc_t = agent.get_zero_states()
     for t, x_t in enumerate(X):
-        [_, _, _, h_t, c_t], _ = agent.forward(x_t.view(1, 1, -1), h_t, c_t)
+        [_, _, _, hc_t], _ = agent.forward(x_t, hc_t)
 
     # recall phase
-    empty_input = torch.zeros(task.x_dim).view(1, 1, -1)
+    empty_input = torch.zeros(task.x_dim)
     for t in range(n_std):
-        [a_t, pi_a_t, v_t, h_t, c_t], _ = agent.forward(empty_input, h_t, c_t)
+        [a_t, pi_a_t, v_t, hc_t], _ = agent.forward(empty_input, hc_t)
         r_t = task.get_reward(a_t)
         # log
         log_r[i, t] = r_t
@@ -72,8 +73,6 @@ for i in range(n_test):
 
 
 '''figures'''
-
-
 
 # mask = np.logical_not(np.mean(log_r, axis=1) == 1)
 # n_test = np.sum(mask)
@@ -129,12 +128,15 @@ ax.set_title('Conditional response probability')
 sns.despine()
 
 
+np.shape(order)
+# order = order[:,0]
 # plot the serial position curve
 unique_recalls = np.concatenate([np.unique(order[i]) for i in range(n_test)])
 counter = Counter(unique_recalls)
+recalls = np.array([counter[i] for i in range(n_std)])
 
 spc_x = range(n_std)
-spc_y = [counter[i] / n_test for i in range(n_std)]
+spc_y = recalls / n_test
 f, ax = plt.subplots(1,1, figsize=(6, 4))
 ax.plot(spc_y)
 # ax.set_ylim([None, 1])
@@ -144,5 +146,20 @@ ax.set_title('Recall probability')
 sns.despine()
 
 
+mean_r_all_trials = np.mean(log_r, axis=1)
+r_mu, r_se = compute_stats(mean_r_all_trials)
+print(f'Average reward = %.2f, se = %.2f' % (r_mu, r_se))
+
 p_lure = np.sum(np.isnan(order)) / len(order.reshape(-1))
 print(f'Probability of lure recall is {p_lure}')
+
+counter = Counter(order[:,0])
+recalls_1st = np.array([counter[i] for i in range(n_std)])
+
+f, ax = plt.subplots(1,1, figsize=(6, 4))
+ax.plot(recalls_1st / np.sum(recalls_1st))
+# ax.set_ylim([None, 1])
+ax.set_xlabel('Position')
+ax.set_ylabel('p')
+ax.set_title('Recall probability for the 1st item')
+sns.despine()

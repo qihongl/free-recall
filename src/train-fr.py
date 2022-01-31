@@ -8,7 +8,8 @@ import time
 import os
 
 from tasks import FreeRecall
-from models import CRPLSTM, A2C_linear
+# from models import CRPLSTM as Agent
+from models import GRU as Agent
 from models import compute_a2c_loss, compute_returns
 from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, estimated_run_time
 from vis import plot_learning_curve
@@ -19,11 +20,11 @@ sns.set(style='white', palette='colorblind', context='talk')
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', default='free-recall', type=str)
 parser.add_argument('--subj_id', default=0, type=int)
-parser.add_argument('--n', default=21, type=int)
+parser.add_argument('--n', default=13, type=int)
 parser.add_argument('--n_std', default=6, type=int)
-parser.add_argument('--dim_hidden', default=512, type=int)
+parser.add_argument('--dim_hidden', default=256, type=int)
 parser.add_argument('--lr', default=1e-3, type=float)
-parser.add_argument('--n_epochs', default=300001, type=int)
+parser.add_argument('--n_epochs', default=100001, type=int)
 parser.add_argument('--reward', default=1, type=int)
 parser.add_argument('--penalty', default=-.5, type=float)
 parser.add_argument('--penalize_repeat', default=1, type=int)
@@ -44,7 +45,7 @@ task = FreeRecall(
 # init model
 dim_input = task.x_dim
 dim_output = task.x_dim
-agent = CRPLSTM(dim_input, p.dim_hidden, dim_output)
+agent = Agent(dim_input, p.dim_hidden, dim_output)
 optimizer = torch.optim.Adam(agent.parameters(), lr=p.lr)
 
 '''start training'''
@@ -59,17 +60,17 @@ for i in range(p.n_epochs):
     X = task.sample(to_pytorch=True)
     log_std_items[i] = task.studied_item_ids
     # reset init state
-    h_t, c_t = agent.get_zero_states()
+    hc_t = agent.get_zero_states()
     # prealloc
     probs, rewards, values = [], [], []
     # study phase
     for t, x_t in enumerate(X):
-        [_, _, _, h_t, c_t], _ = agent.forward(x_t.view(1, 1, -1), h_t, c_t)
+        [_, _, _, hc_t], _ = agent.forward(x_t, hc_t)
 
     # recall phase
-    empty_input = torch.zeros(task.x_dim).view(1, 1, -1)
+    empty_input = torch.zeros(task.x_dim)
     for t in range(p.n_std):
-        [a_t, pi_a_t, v_t, h_t, c_t], _ = agent.forward(empty_input, h_t, c_t)
+        [a_t, pi_a_t, v_t, hc_t], _ = agent.forward(empty_input, hc_t)
         r_t = task.get_reward(a_t)
         # compute loss
         rewards.append(r_t)
