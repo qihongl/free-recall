@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from utils import to_pth, to_np
 
@@ -17,6 +18,7 @@ class FreeRecall():
         self.penalize_repeat = penalize_repeat
         # init helpers
         self._init_stimuli()
+        self._set_reward_schedule()
 
     def _init_stimuli(self, option='onehot'):
         if option == 'onehot':
@@ -26,6 +28,10 @@ class FreeRecall():
             raise NotImplementedError()
         # prealloc studied ids
         self.studied_item_ids = None
+
+    def _set_reward_schedule(self, reward_slope = 1):
+        squares = np.array([(i+1) ** reward_slope for i in range(self.n_std)])
+        self.reward_schedule = self.n_std * squares / squares.sum()
 
     def set_penalize_repeat(self, penalize_repeat):
         self.penalize_repeat = penalize_repeat
@@ -54,17 +60,41 @@ class FreeRecall():
         '''
         if self.studied_item_ids is None:
             raise ValueError('studied_item_ids is none, call sample() first' )
-
-        if to_np(recalled_id) in self.studied_item_ids:
-            if to_np(recalled_id) in self.recalled_item_id:
+        if torch.is_tensor(recalled_id):
+            recalled_id = to_np(recalled_id)
+        if recalled_id in self.studied_item_ids:
+            if recalled_id in self.recalled_item_id:
                 if self.penalize_repeat:
                     return to_pth(self.penalty)
                 else:
                     return to_pth(0)
             else:
-                self.recalled_item_id.append(to_np(recalled_id))
+                self.recalled_item_id.append(recalled_id)
                 return to_pth(self.reward)
         return to_pth(self.penalty)
+
+    def get_reward(self, recalled_id):
+        '''
+        return reward/penalty if the model recalled some studied item / lure
+        '''
+        if self.studied_item_ids is None:
+            raise ValueError('studied_item_ids is none, call sample() first' )
+        if torch.is_tensor(recalled_id):
+            recalled_id = to_np(recalled_id)
+        if recalled_id in self.studied_item_ids:
+            if recalled_id in self.recalled_item_id:
+                if self.penalize_repeat:
+                    return to_pth(self.penalty)
+                else:
+                    return to_pth(0)
+            else:
+                self.recalled_item_id.append(recalled_id)
+                # return to_pth(self.reward)
+                kth_reward = self.reward_schedule[len(self.recalled_item_id)-1]
+                return to_pth(kth_reward)
+        return to_pth(self.penalty)
+
+
 
 
 
@@ -74,12 +104,13 @@ if __name__ == "__main__":
     import seaborn as sns
     sns.set(style='white', palette='colorblind', context='poster')
     np.random.seed()
-    n_std = 5
-    n = 30
+    n_std = 6
+    n = 10
     task = FreeRecall(n_std, n)
     X = task.sample()
     # print(task.stimuli)
     print(task.studied_item_ids)
+    print(task.reward_schedule)
     print(X)
     plt.imshow(X)
 

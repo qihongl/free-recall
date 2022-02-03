@@ -20,10 +20,10 @@ np.random.seed(subj_id)
 torch.manual_seed(subj_id)
 
 # init task
-n = 13
+n = 18
 n_std = 6
 reward = 1
-penalty = -.5
+penalty = -1
 penalize_repeat = True
 task = FreeRecall(
     n_std=n_std, n=n, reward=reward, penalty=penalty,
@@ -31,15 +31,12 @@ task = FreeRecall(
 )
 # init model
 lr = 1e-3
-dim_hidden = 256
+dim_hidden = 512
 dim_input = task.x_dim
 dim_output = task.x_dim
 
-# for dim_hidden in [64, 512]:
-#     print(dim_hidden)
-
 # make log dirs
-epoch_trained = 50000
+epoch_trained = 90000
 exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
@@ -127,8 +124,6 @@ ax.set_ylabel('p')
 ax.set_title('Conditional response probability')
 sns.despine()
 
-
-np.shape(order)
 # order = order[:,0]
 # plot the serial position curve
 unique_recalls = np.concatenate([np.unique(order[i]) for i in range(n_test)])
@@ -146,9 +141,20 @@ ax.set_title('Recall probability')
 sns.despine()
 
 
+
+n_items_recalled = np.empty(n_test, )
+for i in range(n_test):
+    order_i = np.unique(order[i])
+    n_items_recalled[i] = len(order_i[~np.isnan(order_i)])
+prop_item_recalled = n_items_recalled / n_std
+
+pir_mu, pir_se = compute_stats(prop_item_recalled)
+print(f'%% items recalled = %.2f, se = %.2f' % (pir_mu, pir_se))
+
 mean_r_all_trials = np.mean(log_r, axis=1)
 r_mu, r_se = compute_stats(mean_r_all_trials)
 print(f'Average reward = %.2f, se = %.2f' % (r_mu, r_se))
+
 
 p_lure = np.sum(np.isnan(order)) / len(order.reshape(-1))
 print(f'Probability of lure recall is {p_lure}')
