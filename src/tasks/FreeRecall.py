@@ -89,9 +89,9 @@ class FreeRecall():
                     return to_pth(0)
             else:
                 self.recalled_item_id.append(recalled_id)
-                # return to_pth(self.reward)
-                kth_reward = self.reward_schedule[len(self.recalled_item_id)-1]
-                return to_pth(kth_reward)
+                return to_pth(self.reward)
+                # kth_reward = self.reward_schedule[len(self.recalled_item_id)-1]
+                # return to_pth(kth_reward)
         return to_pth(self.penalty)
 
 
