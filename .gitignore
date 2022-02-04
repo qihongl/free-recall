@@ -1,5 +1,6 @@
 # my ig
 log/*
+figs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -15,13 +15,13 @@ from stats import compute_stats, compute_recall_order, lag2index
 from vis import plot_learning_curve
 
 sns.set(style='white', palette='colorblind', context='talk')
-subj_id = 0
+subj_id = 1
 np.random.seed(subj_id)
 torch.manual_seed(subj_id)
 
 # init task
-n = 18
-n_std = 6
+n = 20
+n_std = 8
 reward = 1
 penalty = -1
 penalize_repeat = True
@@ -36,7 +36,7 @@ dim_input = task.x_dim
 dim_output = task.x_dim
 
 # make log dirs
-epoch_trained = 90000
+epoch_trained = 190000
 exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
