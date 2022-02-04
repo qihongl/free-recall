@@ -6,11 +6,11 @@ penalize_repeat=1
 lr=1e-3
 n_epochs=200001
 
-n_std=6
+n_std=8
 
-for subj_id in {0..3}
+for subj_id in {0..5}
 do
-   for dim_hidden in 64 512 2048
+   for dim_hidden in 128 512 1024
    do
      for n in 20
      do
