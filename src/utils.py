@@ -9,7 +9,7 @@ from itertools import product
 
 
 HOST_NAME = os.popen('hostname').read()
-if 'della5' in HOST_NAME:
+if 'della' in HOST_NAME:
     LOG_ROOT = '/tigress/qlu/logs/free-recall/log'
     FIG_ROOT = '/tigress/qlu/logs/free-recall/figs'
 else:
