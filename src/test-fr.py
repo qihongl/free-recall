@@ -10,24 +10,24 @@ from tasks import FreeRecall
 # from models import CRPLSTM as Agent
 from models import GRU as Agent
 from models import compute_a2c_loss, compute_returns
-from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, rm_dup
+from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, rm_dup, int2onehot
 from stats import compute_stats, compute_recall_order, lag2index
 from vis import plot_learning_curve
 from sklearn.linear_model import RidgeClassifier
 
 sns.set(style='white', palette='colorblind', context='talk')
 
-# subj_id = 0
+subj_id = 0
 # for subj_id in range(6):
 np.random.seed(subj_id)
 torch.manual_seed(subj_id)
 print(subj_id)
 
 # init task
-n = 24
+n = 100
 n_std = 8
 reward = 1
-penalty = -1
+penalty = -.5
 penalize_repeat = True
 task = FreeRecall(
     n_std=n_std, n=n, reward=reward, penalty=penalty,
@@ -35,12 +35,12 @@ task = FreeRecall(
 )
 # init model
 # lr = 1e-3
-dim_hidden = 256
-dim_input = task.x_dim
+dim_hidden = 128
+dim_input = task.x_dim * 2 + 1
 dim_output = task.x_dim
 
 # make log dirs
-epoch_trained = 200000
+epoch_trained = 100000
 exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
@@ -61,14 +61,20 @@ for i in range(n_test):
     X = task.sample(to_pytorch=True)
     log_std_items[i] = task.studied_item_ids
     # study phase
+    r_t = torch.zeros(1)
     hc_t = agent.get_zero_states()
-    for t, x_t in enumerate(X):
+    for t, x_t_std in enumerate(X):
+        x_t = torch.cat([x_t_std, torch.zeros(task.x_dim), r_t])
         [_, _, _, hc_t], _ = agent.forward(x_t, hc_t)
         log_h_std[i, t] = to_sqnp(hc_t)
     # recall phase
-    empty_input = torch.zeros(task.x_dim)
+    # empty_input = torch.zeros(task.x_dim)
+    x_t_tst = torch.zeros(task.x_dim)
     for t in range(n_std):
-        [a_t, pi_a_t, v_t, hc_t], _ = agent.forward(empty_input, hc_t)
+        x_t = torch.cat([torch.zeros(task.x_dim), x_t_tst, r_t.view(1)])
+        [a_t, pi_a_t, v_t, hc_t], _ = agent.forward(x_t, hc_t)
+        x_t_tst = int2onehot(a_t, n)
+
         r_t = task.get_reward(a_t)
         # log
         log_r[i, t] = r_t
@@ -82,6 +88,7 @@ for i in range(n_test):
 # select the last n_test trials to analyze
 targ = log_std_items
 resp = log_a
+
 
 # mask by performance
 # mask = np.logical_not(np.mean(log_r, axis=1) >= .8)
@@ -174,12 +181,17 @@ print(f'Average reward = %.2f, se = %.2f' % (r_mu, r_se))
 p_lure = np.sum(np.isnan(order)) / len(order.reshape(-1))
 print(f'Probability of lure recall is {p_lure}')
 
+repeats = [len(log_a[i]) > len(np.unique(log_a[i])) for i in range(n_test)]
+p_repeats = np.sum(repeats) / n_test
+print(f'Probability of repeats is {p_repeats}')
+
 counter = Counter(order[:,0])
 recalls_1st = np.array([counter[i] for i in range(n_std)])
 
 f, ax = plt.subplots(1,1, figsize=(6, 4))
 ax.plot(recalls_1st / np.sum(recalls_1st))
 # ax.set_ylim([None, 1])
+# ax.set_ylim([0, None])
 ax.set_xlabel('Position')
 ax.set_ylabel('p')
 ax.set_title('Recall probability for the 1st item')
@@ -189,11 +201,10 @@ sns.despine()
 '''MVPA decoding'''
 n_tr = 1000
 n_te = n_test - n_tr
-# std_item_id = 0
 
 y_te_std_hat = np.zeros((n, n_tr, n_std))
 y_te_std = np.zeros((n, n_tr, n_std))
-y_tst_hat = np.zeros((n, n_tr, n_std))
+y_te_tst_hat = np.zeros((n, n_tr, n_std))
 dec_acc = np.zeros(n)
 
 # reshape X
@@ -208,8 +219,6 @@ for std_item_id in range(n):
         if np.any(pres_time_item_i[i, :]):
             t = int(np.where(pres_time_item_i[i, :])[0])
             inwm_time_item_i[i, t:] = 1
-
-    # plt.imshow(inwm_time_item_i, aspect='auto')
 
     # reshape y for the classifier for the study phase
     inwm_time_item_i_rs = np.reshape(inwm_time_item_i, (-1,))
@@ -228,47 +237,60 @@ for std_item_id in range(n):
     y_te_std_hat[std_item_id] = np.reshape(ridge.predict(x_te), (-1, n_std))
     y_te_std[std_item_id] = inwm_time_item_i[n_tr:]
     # test phase
-    y_tst_hat[std_item_id] = np.reshape(ridge.predict(x_te_tst), (-1, n_std))
+    y_te_tst_hat[std_item_id] = np.reshape(ridge.predict(x_te_tst), (-1, n_std))
+
+
+'''helper func - decoding accuracy over time for different order info'''
+def compute_hit_by_order(ridge_hits, order_info):
+    dec_acc_dict = {i:[] for i in range(n_std)}
+    # loop over all test set examples
+    for i in np.arange(n_te):
+        # for each test set trial, loop over all studied items
+        for std_o, item_id in enumerate(order_info[n_tr + i]):
+            # whether the o-th studied item was a hit
+            dec_acc_dict[std_o].append(ridge_hits[int(item_id), i])
+    # compute average for all studied order
+    dec_acc_mu = np.zeros((n_std, n_std))
+    dec_acc_se = np.zeros((n_std, n_std))
+    for o in range(n_std):
+        dec_acc_mu[o], dec_acc_se[o] = compute_stats(np.stack(dec_acc_dict[o]))
+    return dec_acc_mu, dec_acc_se
+
+def plot_decoding_curves(dec_acc_mu, dec_acc_se, study_phase=True):
+    cpal = sns.color_palette("Spectral", n_colors = n_std)
+    f, ax = plt.subplots(1,1, figsize=(6, 4))
+    for o in range(n_std):
+        # if study_phase:
+        ax.errorbar(
+            x=np.arange(o, n_std), y=dec_acc_mu[o, o:], yerr=dec_acc_se[o, o:],
+            color = cpal[o], marker='.'
+        )
+        # else:
+        #     ax.errorbar(
+        #         x=np.arange(n_std), y=dec_acc_mu[o], yerr= dec_acc_se[o],
+        #         color = cpal[o]
+        #     )
+    sns.despine()
+    if study_phase:
+        ax.set_xlabel(f'Time (study phase)')
+    else:
+        ax.set_xlabel(f'Time (test phase)')
+    ax.set_ylabel('Decoding accuracy')
+    return f, ax
 
 
 # compute accuracy
-ridge_hits = y_te_std_hat == y_te_std
-ridge_hits_by_item_id = np.mean(ridge_hits, axis=0)
+ridge_hits_std = y_te_std_hat == y_te_std
+ridge_hits_by_item_id = np.mean(ridge_hits_std, axis=0)
 dec_acc_mu, dec_acc_se = compute_stats(np.mean(ridge_hits_by_item_id,axis=0))
 print('the overall decoding accuracy is %.2f, se = %.2f' % (dec_acc_mu, dec_acc_se))
 
 
+'''compute the decoding accuracy over time for different study order index'''
+dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_std, log_std_items)
+f, ax = plot_decoding_curves(dec_acc_mu, dec_acc_se, True)
 
-'''compute the accuracy over time for different study order index'''
-dec_acc_dict = {i:[] for i in range(n_std)}
-# loop over all test set examples
-for i in np.arange(n_te):
-    # for each test set trial, loop over all studied items
-    for std_o, item_id in enumerate(log_std_items[n_tr + i]):
-        # whether the o-th studied item was a hit
-        dec_acc_dict[std_o].append(ridge_hits[int(item_id), i])
-# compute average for all studied order
-dec_acc_mu = np.zeros((n_std, n_std))
-dec_acc_se = np.zeros((n_std, n_std))
-for o in range(n_std):
-    dec_acc_mu[o], dec_acc_se[o] = compute_stats(np.stack(dec_acc_dict[o]))
-
-
-cpal = sns.color_palette("Spectral", n_colors = n_std)
-f, ax = plt.subplots(1,1, figsize=(6, 4))
-for o in range(n_std):
-    ax.errorbar(
-        x=np.arange(o, n_std), y=dec_acc_mu[o, o:], yerr= dec_acc_se[o, o:],
-        color = cpal[o]
-    )
-sns.despine()
-ax.set_xlabel('Time (study phase)')
-ax.set_ylabel('Decoding accuracy')
-
-# # loop over all test set examples
-# for i in np.arange(n_te):
-#     # for each test set trial, loop over all studied items
-#     for std_o, item_id in enumerate(log_std_items[n_tr + i]):
-#         # whether the o-th studied item was a hit
-#         item_id
-#         # print(std_o, item_id)
+'''compute the same thing during the test phase'''
+ridge_hits_tst = y_te_tst_hat == 1
+dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_tst, log_a)
+f, ax = plot_decoding_curves(dec_acc_mu, dec_acc_se, False)

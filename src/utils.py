@@ -52,6 +52,8 @@ def rm_dup(seq):
     seen_add = seen.add
     return [x for x in seq if not (x in seen or seen_add(x))]
 
+def int2onehot(num, dim):
+    return torch.eye(dim)[num]
 
 def make_log_fig_dir(exp_name, log_root=LOG_ROOT, fig_root=FIG_ROOT, makedirs=True):
     log_path = os.path.join(log_root, exp_name)
