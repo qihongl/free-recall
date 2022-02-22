@@ -28,18 +28,20 @@ def moving_average(x, winsize):
 
 def compute_recall_order(targ, resp):
     '''compute the recall order
+    this works when the length of recall phase is > than n studied items
     e.g.
     if target is [3, 1, 4, 2]
     and resp is [1, 1, 4, 5]
     then order is [1, 1, 2, np.nan]
     '''
-    assert np.shape(targ) == np.shape(resp)
-    (n_test, tmax) = np.shape(targ)
-    order = np.full((n_test, tmax), np.nan)
+    assert np.shape(targ)[0] == np.shape(resp)[0]
+    (n_test, n_std) = np.shape(targ)
+    (_, len_recall_phase) = np.shape(resp)
+    order = np.full((n_test, len_recall_phase), np.nan)
     # loop over all trials
     for i in range(n_test):
         # for each trial, loop over time
-        for j in range(tmax):
+        for j in range(len_recall_phase):
             # if recall a targ
             if resp[i][j] in targ[i]:
                 # figure out the true order
