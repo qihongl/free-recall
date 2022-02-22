@@ -57,42 +57,42 @@ class FreeRecall():
     def get_reward(self, recalled_id):
         '''
         return reward/penalty if the model recalled some studied item / lure
-        '''
-        if self.studied_item_ids is None:
-            raise ValueError('studied_item_ids is none, call sample() first' )
-        if torch.is_tensor(recalled_id):
-            recalled_id = to_np(recalled_id)
-        if recalled_id in self.studied_item_ids:
-            if recalled_id in self.recalled_item_id:
-                if self.penalize_repeat:
-                    return to_pth(self.penalty)
-                else:
-                    return to_pth(0)
-            else:
-                self.recalled_item_id.append(recalled_id)
-                return to_pth(self.reward)
-        return to_pth(self.penalty)
 
-    def get_reward(self, recalled_id):
-        '''
-        return reward/penalty if the model recalled some studied item / lure
+        repeated recall of studied item will be penalized
+
+        stop when all std items were recal will be rewarded,
+        but early stopping will be penalized
+        - this function should work if the model doesn't have a stop unit
         '''
         if self.studied_item_ids is None:
             raise ValueError('studied_item_ids is none, call sample() first' )
+        # convert action to numpy type is necessary
         if torch.is_tensor(recalled_id):
             recalled_id = to_np(recalled_id)
-        if recalled_id in self.studied_item_ids:
-            if recalled_id in self.recalled_item_id:
-                if self.penalize_repeat:
-                    return to_pth(self.penalty)
-                else:
-                    return to_pth(0)
-            else:
-                self.recalled_item_id.append(recalled_id)
+        # if the action is the stop unit
+        if recalled_id == self.n:
+            if len(self.recalled_item_id) == self.n_std:
                 return to_pth(self.reward)
-                # kth_reward = self.reward_schedule[len(self.recalled_item_id)-1]
-                # return to_pth(kth_reward)
-        return to_pth(self.penalty)
+            else:
+                return to_pth(2 * self.penalty)
+        # if recalled item is a lure, penalty
+        if recalled_id not in self.studied_item_ids:
+            return to_pth(self.penalty)
+        # here, recalled item is studied
+        # if recalled item has been recalled
+        if recalled_id in self.recalled_item_id:
+            # penalize repeat
+            if self.penalize_repeat:
+                return to_pth(self.penalty)
+            else:
+                return to_pth(0)
+        # if is studied but hasn't been recalled, reward the model
+        else:
+            self.recalled_item_id.append(recalled_id)
+            return to_pth(self.reward)
+            # kth_reward = self.reward_schedule[len(self.recalled_item_id)-1]
+            # return to_pth(kth_reward)
+
 
 
 
