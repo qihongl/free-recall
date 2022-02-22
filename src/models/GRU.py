@@ -6,7 +6,7 @@ https://github.com/emadRad/lstm-gru-pytorch/blob/master/lstm_gru.ipynb
 import math
 import torch
 import torch.nn as nn
-# from models.A2C import A2C_linear
+from models.A2C import A2C_linear
 from models.A2C import A2C
 from models._rl_helpers import pick_action
 

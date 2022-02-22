@@ -24,8 +24,8 @@ torch.manual_seed(subj_id)
 print(subj_id)
 
 # init task
-n = 100
-n_std = 8
+n = 200
+n_std = 12
 reward = 1
 penalty = -.5
 penalize_repeat = True
