@@ -24,10 +24,10 @@ torch.manual_seed(subj_id)
 print(subj_id)
 
 # init task
-n = 40
+n = 56
 n_std = 8
 reward = 1
-penalty = -.2
+penalty = -.15
 penalize_repeat = True
 task = FreeRecall(
     n_std=n_std, n=n, reward=reward, penalty=penalty,
@@ -40,7 +40,7 @@ dim_input = task.x_dim * 2 + 1
 dim_output = task.x_dim + 1
 
 # make log dirs
-epoch_trained = 90000
+epoch_trained = 20000
 exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 

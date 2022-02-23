@@ -25,7 +25,7 @@ print(subj_id)
 
 # init task
 n = 200
-n_std = 12
+n_std = 8
 reward = 1
 penalty = -.5
 penalize_repeat = True
