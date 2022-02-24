@@ -20,27 +20,24 @@ sns.set(style='white', palette='colorblind', context='talk')
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', default='free-recall-stp', type=str)
 parser.add_argument('--subj_id', default=0, type=int)
-parser.add_argument('--n', default=50, type=int)
-parser.add_argument('--n_std', default=8, type=int)
+parser.add_argument('--n_std', default=12, type=int)
+parser.add_argument('--v', default=4, type=int)
+parser.add_argument('--n', default=48, type=int)
 parser.add_argument('--dim_hidden', default=256, type=int)
 parser.add_argument('--lr', default=3e-3, type=float)
 parser.add_argument('--n_epochs', default=100001, type=int)
 parser.add_argument('--reward', default=1, type=int)
-parser.add_argument('--penalty', default=-.15, type=float)
-parser.add_argument('--penalize_repeat', default=1, type=int)
+parser.add_argument('--penalty', default=-.25, type=float)
 p = parser.parse_args()
 np.random.seed(p.subj_id)
 torch.manual_seed(p.subj_id)
 
 # make log dirs
-exp_name = f'n-{p.n}-n_std-{p.n_std}/h-{p.dim_hidden}/sub-{p.subj_id}'
+exp_name = f'n-{p.n}-n_std-{p.n_std}-v-{p.v}/h-{p.dim_hidden}/sub-{p.subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name)
 
 # init task
-task = FreeRecall(
-    n_std=p.n_std, n=p.n, reward=p.reward, penalty=p.penalty,
-    penalize_repeat=bool(p.penalize_repeat)
-)
+task = FreeRecall(n_std=p.n_std, n=p.n, v=p.v, reward=p.reward, penalty=p.penalty)
 
 # init model
 dim_input = task.x_dim * 2 + 1
@@ -49,18 +46,16 @@ agent = Agent(dim_input, p.dim_hidden, dim_output)
 optimizer = torch.optim.Adam(agent.parameters(), lr=p.lr)
 
 '''start training'''
-len_test_phase = p.n_std + int(p.n_std * .5)
+len_test_phase = p.n_std + p.v + 1
 log_r = [0 for i in range(p.n_epochs)]
-# np.full((p.n_epochs, len_test_phase), np.nan)
+log_p_rcl = np.zeros(p.n_epochs, )
 log_a = np.full((p.n_epochs, len_test_phase), np.nan)
-log_std_items = np.full((p.n_epochs, p.n_std), np.nan)
 log_loss_actor = np.full((p.n_epochs, ), np.nan)
 log_loss_critic = np.full((p.n_epochs, ), np.nan)
 for i in range(p.n_epochs):
     time_s = time.time()
     # re-sample studied items
     X = task.sample(to_pytorch=True)
-    log_std_items[i] = task.studied_item_ids
     # reset init state
     hc_t = agent.get_zero_states()
     # study phase
@@ -117,10 +112,11 @@ for i in range(p.n_epochs):
         ert = estimated_run_time(time_took, p.n_epochs)
         print('Estimated run time = %.2f hours' % (ert))
 
-    pct_rcld = len(task.recalled_item_id) / p.n_std
+    log_p_rcl[i] = len(task.recalled_item_id) / len(task.studied_item_ids)
     if i % 100 == 0:
         print('%3d | r = %.4f, %% item recalled: %.2f loss a = %.4f, c = %.4f, time = %.2f sec' % (
-        i, np.mean(log_r[i]), pct_rcld, log_loss_actor[i], log_loss_critic[i], time_took))
+        i, np.mean(log_r[i]), log_p_rcl[i], log_loss_actor[i], log_loss_critic[i], time_took)
+    )
 
 '''figures'''
 # plot the learning curves

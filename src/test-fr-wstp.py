@@ -24,15 +24,12 @@ torch.manual_seed(subj_id)
 print(subj_id)
 
 # init task
-n = 56
-n_std = 8
+n = 48
+n_std = 12
+v_train = 4
 reward = 1
-penalty = -.15
-penalize_repeat = True
-task = FreeRecall(
-    n_std=n_std, n=n, reward=reward, penalty=penalty,
-    penalize_repeat=penalize_repeat
-)
+penalty = -.25
+task = FreeRecall(n_std=n_std, n=n, v=0, reward=reward, penalty=penalty)
 # init model
 # lr = 1e-3
 dim_hidden = 256
@@ -41,7 +38,7 @@ dim_output = task.x_dim + 1
 
 # make log dirs
 epoch_trained = 20000
-exp_name = f'n-{n}-n_std-{n_std}/h-{dim_hidden}/sub-{subj_id}'
+exp_name = f'n-{n}-n_std-{n_std}-v-{v_train}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
 # reload the weights
@@ -51,7 +48,7 @@ agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 
 # testing
 n_test = 2000
-len_test_phase = task.n_std + int(task.n_std * .5)
+len_test_phase = task.n_std + v_train + 1
 # log_r = np.zeros((n_test, n_std))
 log_r = [0 for i in range(n_test)]
 log_a = np.full((n_test, len_test_phase), np.nan)
