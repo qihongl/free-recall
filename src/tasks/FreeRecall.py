@@ -5,20 +5,39 @@ from utils import to_pth, to_np
 
 class FreeRecall():
     '''
-    learn n/2 (out of n) items during study, and then recall during test
+    learn n_std (out of n) items during study, and then recall during test
     '''
 
-    def __init__(self, n_std=8, n=50, reward=1, penalty=-1, penalize_repeat=True):
-        assert n > n_std > 1, 'n words > n study items > 1'
+    def __init__(self, n_std=8, n=50, v=0, reward=1, penalty=-1):
+        """init the free recall task.
+
+        Parameters
+        ----------
+        n_std : int
+            the (mean) number of studied items
+        n : int
+            the number of possible words/tokens
+        v : int
+            the variation of number of studied items
+            the actual studied items for a particular trial is uniformly
+            sampled from U(n_std-v, n_std+v)
+        reward : float
+            the size of the reward when recalling a studied item (the 1st time)
+            and stop the trial after recalling all items
+        penalty : float
+            the size of the reward when recalling a lure or recalling a
+            previously recalled item
+
+        """
+        assert n > n_std + v >= n_std > 1, 'n words > n study items > 1'
         assert reward > 0 and penalty <= 0, 'reward/penalty must be pos/neg'
         self.n = n
+        self.v = v
         self.n_std = n_std
         self.reward = reward
         self.penalty = penalty
-        self.penalize_repeat = penalize_repeat
         # init helpers
         self._init_stimuli()
-        self._set_reward_schedule()
 
     def _init_stimuli(self, option='onehot'):
         if option == 'onehot':
@@ -29,30 +48,29 @@ class FreeRecall():
         # prealloc studied ids
         self.studied_item_ids = None
 
-    def _set_reward_schedule(self, reward_slope = 1):
-        squares = np.array([(i+1) ** reward_slope for i in range(self.n_std)])
-        self.reward_schedule = self.n_std * squares / squares.sum()
-
-    def set_penalize_repeat(self, penalize_repeat):
-        self.penalize_repeat = penalize_repeat
-
     def sample(self, to_pytorch=False):
         '''
         randomly set the ids for the studied items, and return their one hots
         '''
+        # reinit the list of recalled items
+        self.recalled_item_id = []
+        # decide the number of study items
+        if self.v > 0:
+            n_std = self.n_std + np.random.randint(low=-self.v, high=+self.v)
+        else:
+            n_std = self.n_std
         # sample the studied items
         self.studied_item_ids = np.random.choice(
-            range(self.n), size=self.n_std, replace=False
+            range(self.n), size=n_std, replace=False
         )
-        self.recalled_item_id = []
-        X = np.zeros((self.n_std, self.x_dim))
         # construct the input / onehot reps
+        stimuli = np.zeros((n_std, self.x_dim))
         for i, id in enumerate(self.studied_item_ids):
-            X[i,:] = self.stimuli[id]
+            stimuli[i,:] = self.stimuli[id]
         # to pytorch format
         if to_pytorch:
-            X = to_pth(X)
-        return X
+            stimuli = to_pth(stimuli)
+        return stimuli
 
     def get_reward(self, recalled_id):
         '''
@@ -71,7 +89,7 @@ class FreeRecall():
             recalled_id = to_np(recalled_id)
         # if the action is the stop unit
         if recalled_id == self.n:
-            if len(self.recalled_item_id) == self.n_std:
+            if len(self.recalled_item_id) == len(self.studied_item_ids):
                 return to_pth(self.reward)
             else:
                 return to_pth(2 * self.penalty)
@@ -82,17 +100,11 @@ class FreeRecall():
         # if recalled item has been recalled
         if recalled_id in self.recalled_item_id:
             # penalize repeat
-            if self.penalize_repeat:
-                return to_pth(self.penalty)
-            else:
-                return to_pth(0)
+            return to_pth(self.penalty)
         # if is studied but hasn't been recalled, reward the model
         else:
             self.recalled_item_id.append(recalled_id)
             return to_pth(self.reward)
-            # kth_reward = self.reward_schedule[len(self.recalled_item_id)-1]
-            # return to_pth(kth_reward)
-
 
 
 
@@ -104,16 +116,16 @@ if __name__ == "__main__":
     import seaborn as sns
     sns.set(style='white', palette='colorblind', context='poster')
     np.random.seed()
+
+    '''simulation - fixed the number of study items '''
     n_std = 6
     n = 10
     task = FreeRecall(n_std, n)
     X = task.sample()
     # print(task.stimuli)
     print(task.studied_item_ids)
-    print(task.reward_schedule)
     print(X)
     plt.imshow(X)
-
 
     for a_t in range(n):
         print(a_t, task.get_reward(a_t))
@@ -134,3 +146,23 @@ if __name__ == "__main__":
             r += task.get_reward(a_t)
         log_r[i] = r
     print(log_r)
+
+    '''simulation - VARY the number of study items '''
+    n_std = 6
+    v = 3
+    n = 10
+    task = FreeRecall(n_std=n_std, n=n, v=v)
+    X = task.sample()
+    # print(task.stimuli)
+    print(task.studied_item_ids)
+    # print(X)
+    # plt.imshow(X)
+
+    log_r = []
+    for t, a_t in enumerate(task.studied_item_ids):
+        r_t = task.get_reward(a_t)
+        log_r.append(to_np(r_t))
+    r_t = task.get_reward(task.n)
+
+    log_r.append(to_np(r_t))
+    print(np.array(log_r))
