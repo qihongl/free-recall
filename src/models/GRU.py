@@ -7,7 +7,7 @@ import math
 import torch
 import torch.nn as nn
 from models.A2C import A2C_linear
-from models.A2C import A2C
+# from models.A2C import A2C
 from models._rl_helpers import pick_action
 
 
@@ -26,8 +26,8 @@ class GRU(nn.Module):
         self.bias = bias
         self.i2h = nn.Linear(input_dim, 3 * hidden_dim, bias=bias)
         self.h2h = nn.Linear(hidden_dim, 3 * hidden_dim, bias=bias)
-        # self.a2c = A2C_linear(self.hidden_dim, self.output_dim)
-        self.a2c = A2C(self.hidden_dim, self.hidden_dim, self.output_dim)
+        self.a2c = A2C_linear(self.hidden_dim, self.output_dim)
+        # self.a2c = A2C(self.hidden_dim, self.hidden_dim, self.output_dim)
         self.reset_parameters()
 
     def reset_parameters(self):

@@ -26,18 +26,18 @@ print(subj_id)
 # init task
 n = 48
 n_std = 12
-v_train = 4
+v_train = 3
+v_test = 0
 reward = 1
-penalty = -.25
-task = FreeRecall(n_std=n_std, n=n, v=0, reward=reward, penalty=penalty)
-# init model
-# lr = 1e-3
+penalty = -.2
 dim_hidden = 256
+
+task = FreeRecall(n_std=n_std, n=n, v=v_test, reward=reward, penalty=penalty)
 dim_input = task.x_dim * 2 + 1
 dim_output = task.x_dim + 1
 
 # make log dirs
-epoch_trained = 20000
+epoch_trained = 10000
 exp_name = f'n-{n}-n_std-{n_std}-v-{v_train}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
@@ -53,7 +53,7 @@ len_test_phase = task.n_std + v_train + 1
 log_r = [0 for i in range(n_test)]
 log_a = np.full((n_test, len_test_phase), np.nan)
 log_std_items = np.zeros((n_test, n_std))
-log_h_std = np.full((n_test, len_test_phase, dim_hidden), np.nan)
+log_h_std = np.full((n_test, task.n_std, dim_hidden), np.nan)
 log_h_tst = np.full((n_test, len_test_phase, dim_hidden), np.nan)
 for i in range(n_test):
     # re-sample studied items
@@ -87,24 +87,11 @@ for i in range(n_test):
     log_r[i] = log_r_i
 
 
-
-
-
 '''figures'''
-
-
-
-
 
 # select the last n_test trials to analyze
 targ = log_std_items
 resp = log_a
-
-# mask by performance
-# mask = np.logical_not(np.mean(log_r, axis=1) >= .8)
-# n_test = np.sum(mask)
-# targ = log_std_items[mask]
-# resp = log_a[mask]
 
 # compute the recall order given target and responses
 order = compute_recall_order(targ, resp)
@@ -180,10 +167,8 @@ prop_item_recalled = n_items_recalled / n_std
 pir_mu, pir_se = compute_stats(prop_item_recalled)
 print(f'%% items recalled = %.2f, se = %.2f' % (pir_mu, pir_se))
 
-np.shape(log_r)
 
 mean_r_all_trials = [np.mean(log_r_) for log_r_ in log_r]
-# mean_r_all_trials = np.mean(log_r, axis=1)
 r_mu, r_se = compute_stats(mean_r_all_trials)
 print(f'Average reward = %.2f, se = %.2f' % (r_mu, r_se))
 
@@ -221,14 +206,14 @@ n_te = n_test - n_tr
 
 y_te_std_hat = np.zeros((n, n_tr, n_std))
 y_te_std = np.zeros((n, n_tr, n_std))
-y_te_tst_hat = np.zeros((n, n_tr, n_std))
+
 dec_acc = np.zeros(n)
 
-# np.shape(log_h_std)
 # reshape X
-log_h_std_rs = np.reshape(log_h_std[:,:n_std,:], (-1, dim_hidden))
-log_h_tst_rs = np.reshape(log_h_tst[:,:n_std,:], (-1, dim_hidden))
+log_h_std_rs = np.reshape(log_h_std, (-1, dim_hidden))
+ridge_clfs = [None for _ in range(n)]
 
+# train/test the clf on the study phase
 for std_item_id in range(n):
     # make y - whether item i has been presented in the past
     pres_time_item_i = log_std_items == std_item_id
@@ -245,17 +230,26 @@ for std_item_id in range(n):
     x_tr = log_h_std_rs[:n_tr* n_std]
     y_tr = inwm_time_item_i_rs[:n_tr* n_std]
     x_te = log_h_std_rs[n_tr* n_std:]
-    #
-    x_te_tst = log_h_tst_rs[n_tr* n_std:]
 
     # fit model
-    ridge = RidgeClassifier().fit(x_tr, y_tr)
-    # make prediction
-    # study phase
-    y_te_std_hat[std_item_id] = np.reshape(ridge.predict(x_te), (-1, n_std))
+    ridge_clfs[std_item_id] = RidgeClassifier().fit(x_tr, y_tr)
+    # test the clf on the study phase test set
+    y_te_std_hat_rs = ridge_clfs[std_item_id].predict(x_te)
+    y_te_std_hat[std_item_id] = np.reshape(y_te_std_hat_rs, (-1, n_std))
     y_te_std[std_item_id] = inwm_time_item_i[n_tr:]
-    # test phase
-    y_te_tst_hat[std_item_id] = np.reshape(ridge.predict(x_te_tst), (-1, n_std))
+
+# generalize the clf to the test phase
+y_te_tst_hat = np.full((n, n_tr, len_test_phase), np.nan)
+# test phase
+for std_item_id in range(n):
+    for i in range(n_tr):
+        for t in range(len_test_phase):
+            if not np.isnan(log_h_tst[n_tr + i, t]).any():
+                y_te_tst_hat[std_item_id, i, t] = ridge_clfs[std_item_id].predict(
+                    log_h_tst[n_tr + i, t].reshape(1,-1)
+                )
+
+
 
 
 '''helper func - decoding accuracy over time for different order info'''
@@ -265,8 +259,10 @@ def compute_hit_by_order(ridge_hits, order_info):
     for i in np.arange(n_te):
         # for each test set trial, loop over all studied items
         for std_o, item_id in enumerate(order_info[n_tr + i]):
+            if std_o >= n_std: # if std_o > n_std -> test phase buffer time
+                break
             # whether the o-th studied item was a hit
-            if np.isnan(item_id):
+            if np.isnan(item_id) or item_id == n:
                 continue
             dec_acc_dict[std_o].append(ridge_hits[int(item_id), i])
     # compute average for all studied order
@@ -280,16 +276,10 @@ def plot_decoding_curves(dec_acc_mu, dec_acc_se, study_phase=True):
     cpal = sns.color_palette("Spectral", n_colors = n_std)
     f, ax = plt.subplots(1,1, figsize=(6, 4))
     for o in range(n_std):
-        # if study_phase:
         ax.errorbar(
             x=np.arange(o, n_std), y=dec_acc_mu[o, o:], yerr=dec_acc_se[o, o:],
             color = cpal[o], marker='.'
         )
-        # else:
-        #     ax.errorbar(
-        #         x=np.arange(n_std), y=dec_acc_mu[o], yerr= dec_acc_se[o],
-        #         color = cpal[o]
-        #     )
     sns.despine()
     if study_phase:
         ax.set_xlabel(f'Time (study phase)')
@@ -311,9 +301,7 @@ dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_std, log_std_items)
 f, ax = plot_decoding_curves(dec_acc_mu, dec_acc_se, True)
 
 '''compute the same thing during the test phase'''
+# compare prediction to 1 since all items were presented
 ridge_hits_tst = y_te_tst_hat == 1
-log_a_nonan = log_a
-log_a_nonan[log_a_nonan == n]= np.nan
-
-dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_tst, log_a_nonan[:,:n_std])
+dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_tst[:,:,:n_std], log_a)
 f, ax = plot_decoding_curves(dec_acc_mu, dec_acc_se, False)
