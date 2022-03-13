@@ -20,14 +20,17 @@ sns.set(style='white', palette='colorblind', context='talk')
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', default='free-recall-stp', type=str)
 parser.add_argument('--subj_id', default=0, type=int)
+parser.add_argument('--n', default=48, type=int)
 parser.add_argument('--n_std', default=12, type=int)
 parser.add_argument('--v', default=3, type=int)
-parser.add_argument('--n', default=60, type=int)
 parser.add_argument('--dim_hidden', default=256, type=int)
 parser.add_argument('--lr', default=3e-3, type=float)
+parser.add_argument('--beta', default=1, type=float)
+parser.add_argument('--beta_decay', default=.9, type=float)
+parser.add_argument('--beta_decay_freq', default=10000, type=float)
 parser.add_argument('--n_epochs', default=100001, type=int)
 parser.add_argument('--reward', default=1, type=int)
-parser.add_argument('--penalty', default=-.2, type=float)
+parser.add_argument('--penalty', default=-.25, type=float)
 p = parser.parse_args()
 np.random.seed(p.subj_id)
 torch.manual_seed(p.subj_id)
@@ -42,7 +45,7 @@ task = FreeRecall(n_std=p.n_std, n=p.n, v=p.v, reward=p.reward, penalty=p.penalt
 # init model
 dim_input = task.x_dim * 2 + 1
 dim_output = task.x_dim + 1
-agent = Agent(dim_input, p.dim_hidden, dim_output)
+agent = Agent(dim_input, p.dim_hidden, dim_output, p.beta)
 optimizer = torch.optim.Adam(agent.parameters(), lr=p.lr)
 
 '''start training'''
@@ -101,11 +104,17 @@ for i in range(p.n_epochs):
         loss.backward()
         optimizer.step()
 
+    # update beta
+    if i > 0 and p.beta_decay_freq and i % p.beta_decay_freq == 0:
+        p.beta *= p.beta_decay
+        agent.update_beta(p.beta)
+
     # save weights
     if i % 10000 == 0:
         '''save weights'''
         fname = f'wts-{i}.pth'
         torch.save(agent.state_dict(), os.path.join(log_path, fname))
+
     # compute ert
     time_took = time.time() - time_s
     if i == 0:
@@ -114,8 +123,8 @@ for i in range(p.n_epochs):
 
     log_p_rcl[i] = len(task.recalled_item_id) / len(task.studied_item_ids)
     if i % 100 == 0:
-        print('%3d | r = %.4f, %% item recalled: %.2f loss a = %.4f, c = %.4f, time = %.2f sec' % (
-        i, np.mean(log_r[i]), log_p_rcl[i], log_loss_actor[i], log_loss_critic[i], time_took)
+        print('%3d | r = %.4f, %% item recalled: %.2f loss a = %.4f, c = %.4f, beta = %.4f, time = %.2f sec' % (
+        i, np.mean(log_r[i]), log_p_rcl[i], log_loss_actor[i], log_loss_critic[i], p.beta, time_took)
     )
 
 '''figures'''

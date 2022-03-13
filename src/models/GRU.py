@@ -18,11 +18,12 @@ class GRU(nn.Module):
 
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim, bias=True):
+    def __init__(self, input_dim, hidden_dim, output_dim, beta=1, bias=True):
         super(GRU, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
+        self.beta = beta
         self.bias = bias
         self.i2h = nn.Linear(input_dim, 3 * hidden_dim, bias=bias)
         self.h2h = nn.Linear(hidden_dim, 3 * hidden_dim, bias=bias)
@@ -34,6 +35,9 @@ class GRU(nn.Module):
         std = 1.0 / math.sqrt(self.hidden_dim)
         for w in self.parameters():
             w.data.uniform_(-std, std)
+
+    def update_beta(self, new_beta):
+        self.beta = new_beta
 
     def forward(self, x, hidden):
         x = x.view(1, -1)
@@ -58,19 +62,13 @@ class GRU(nn.Module):
         return output, cache
 
 
-    def get_output(self, h_t, beta=1):
-        '''generate the output depending on the task requirement
-        if discrete - rl
-        if continuous, do regression
+    def get_output(self, h_t):
+        '''generate the rl output
         '''
-        # if self.output_format == 'discrete':
-        # policy
-        pi_a_t, v_t = self.a2c.forward(h_t, beta)
+        pi_a_t, v_t = self.a2c.forward(h_t, self.beta)
+        # print(pi_a_t)
         # pick an action
         a_t, prob_a_t = pick_action(pi_a_t)
-        # else:
-        #     a_t = self.h2o(h_t)
-        #     prob_a_t, v_t = None, None
         return a_t, prob_a_t, v_t
 
     def get_random_init_states(self, scale=.1):
