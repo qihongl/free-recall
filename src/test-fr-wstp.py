@@ -25,36 +25,39 @@ print(subj_id)
 
 # init task
 n = 48
-n_std = 12
-v_train = 3
-v_test = 0
+n_std_tr = 12
+n_std_te = 6
+v_tr = 3
+v_te = 0
 reward = 1
 penalty = -.2
 dim_hidden = 256
+beta = .1
 
-task = FreeRecall(n_std=n_std, n=n, v=v_test, reward=reward, penalty=penalty)
+task = FreeRecall(n_std=n_std_te, n=n, v=v_te, reward=reward, penalty=penalty)
 dim_input = task.x_dim * 2 + 1
 dim_output = task.x_dim + 1
 
 # make log dirs
-epoch_trained = 10000
-exp_name = f'n-{n}-n_std-{n_std}-v-{v_train}/h-{dim_hidden}/sub-{subj_id}'
+epoch_trained = 100000
+exp_name = f'n-{n}-n_std-{n_std_tr}-v-{v_tr}/h-{dim_hidden}/sub-{subj_id}'
 log_path, fig_path = make_log_fig_dir(exp_name, makedirs=False)
 
 # reload the weights
 fname = f'wts-{epoch_trained}.pth'
-agent = Agent(dim_input, dim_hidden, dim_output)
+agent = Agent(dim_input, dim_hidden, dim_output, beta)
 agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 
-# testing
+# testingn
 n_test = 2000
-len_test_phase = task.n_std + v_train + 1
-# log_r = np.zeros((n_test, n_std))
+len_test_phase = task.n_std + v_tr + 1
+# log_r = np.zeros((n_test, n_std_te))
 log_r = [0 for i in range(n_test)]
 log_a = np.full((n_test, len_test_phase), np.nan)
-log_std_items = np.zeros((n_test, n_std))
+log_std_items = np.zeros((n_test, n_std_te))
 log_h_std = np.full((n_test, task.n_std, dim_hidden), np.nan)
 log_h_tst = np.full((n_test, len_test_phase, dim_hidden), np.nan)
+i=0
 for i in range(n_test):
     # re-sample studied items
     X = task.sample(to_pytorch=True)
@@ -86,19 +89,53 @@ for i in range(n_test):
     # collect the reward
     log_r[i] = log_r_i
 
-
 '''figures'''
 
 # select the last n_test trials to analyze
 targ = log_std_items
 resp = log_a
 
+'''compute error info'''
+# compute number of lures for each trials
+n_lures = np.zeros(n_test)
+stop_times = np.full(n_test, np.nan)
+for i in range(n_test):
+    stop_time = np.where(resp[i] == n)
+    # trim the trial at the stop point
+    if len(stop_time[0]) > 0:
+        stop_times[i] = int(stop_time[0])
+        resp_i = resp[i][:int(stop_time[0])]
+    else:
+        resp_i = resp[i]
+    # count the number of items that are not in the targets
+    for resp_it in resp_i:
+        if resp_it not in targ[i]:
+            n_lures[i] +=1
+
+n_lures_mu, n_lures_se = compute_stats(n_lures)
+stop_times_mu = np.nanmean(stop_times)
+
+# compute number of repeats for each trials
+repeats = np.zeros(n_test)
+for i in range(n_test):
+    recalled_items_i = log_a[i][~np.isnan(log_a[i])]
+    # count the number of redundent items
+    repeats[i] = len(recalled_items_i) - len(np.unique(recalled_items_i))
+repeats_mu, repeats_se = compute_stats(repeats)
+
+print(f'Lures   : mu = %.2f, se = %.2f' % (n_lures_mu, n_lures_se))
+print(f'Repeats : mu = %.2f, se = %.2f' % (repeats_mu, repeats_se))
+print(f'Stop time : mu = %.2f' % (stop_times_mu))
+
+
+'''compute recall order '''
+
 # compute the recall order given target and responses
 order = compute_recall_order(targ, resp)
 
 # compute the tally for actual and possible responses
-tally = np.zeros((n_test, (n_std - 1)* 2))
-tally_poss = np.zeros((n_test, (n_std - 1)* 2))
+tally = np.zeros((n_test, (n_std_te - 1)* 2))
+tally_poss = np.zeros((n_test, (n_std_te - 1)* 2))
 lags = []
 for i in range(n_test):
     order_i = order[i]
@@ -109,16 +146,16 @@ for i in range(n_test):
     for j in range(len(order_i_rmnan) - 1):
         lag = int(order_i_rmnan[j+1] -  order_i_rmnan[j])
         if lag != 0:
-            lag_index = lag2index(lag, n_std)
+            lag_index = lag2index(lag, n_std_te)
             # increment the count of the corresponding lag index
             tally[i, lag_index] +=1
             lags.append(lag)
 
     for j in range(len(order_i_rmnan) - 1):
-        for o in range(n_std):
+        for o in range(n_std_te):
             lag_poss = int(o - order_i_rmnan[j])
             if lag_poss != 0:
-                lag_index = lag2index(lag_poss, n_std)
+                lag_index = lag2index(lag_poss, n_std_te)
                 tally_poss[i, lag_index] +=1
 
 assert np.all(tally_poss >= tally), 'possible count must >= actual count'
@@ -127,26 +164,27 @@ crp = np.divide(tally, tally_poss, out=np.zeros_like(tally), where=tally_poss!=0
 # crp = tally / tally.sum(axis=1)[:,None]
 
 p_mu, p_se = compute_stats(crp, axis=0)
-xticklabels = np.concatenate((np.arange(-(n_std - 1), 0), np.arange(1, n_std)))
+xticklabels = np.concatenate((np.arange(-(n_std_te - 1), 0), np.arange(1, n_std_te)))
 
 f, ax = plt.subplots(1,1, figsize=(6,4))
-ax.errorbar(x=np.arange(n_std - 1), y=p_mu[:n_std - 1], yerr = p_se[:n_std - 1],color='k')
-ax.errorbar(x=np.arange(n_std - 1) + (n_std - 1), y=p_mu[-(n_std - 1):], yerr = p_se[-(n_std - 1):], color='k')
+ax.errorbar(x=np.arange(n_std_te - 1), y=p_mu[:n_std_te - 1], yerr = p_se[:n_std_te - 1],color='k')
+ax.errorbar(x=np.arange(n_std_te - 1) + (n_std_te - 1), y=p_mu[-(n_std_te - 1):], yerr = p_se[-(n_std_te - 1):], color='k')
 ax.set_ylim([0, None])
-ax.set_xticks(np.arange((n_std - 1)*2))
+ax.set_xticks(np.arange((n_std_te - 1)*2))
 ax.set_xticklabels(xticklabels)
 ax.set_xlabel('Lag')
 ax.set_ylabel('p')
 ax.set_title('Conditional response probability')
 sns.despine()
 
+''' compute recall probabilit arranged according to the studied order'''
 # order = order[:,0]
 # plot the serial position curve
 unique_recalls = np.concatenate([np.unique(order[i]) for i in range(n_test)])
 counter = Counter(unique_recalls)
-recalls = np.array([counter[i] for i in range(n_std)])
+recalls = np.array([counter[i] for i in range(n_std_te)])
 
-spc_x = range(n_std)
+spc_x = range(n_std_te)
 spc_y = recalls / n_test
 f, ax = plt.subplots(1,1, figsize=(6, 4))
 ax.plot(spc_y)
@@ -156,40 +194,9 @@ ax.set_ylabel('p')
 ax.set_title('Recall probability')
 sns.despine()
 
-
-
-n_items_recalled = np.empty(n_test, )
-for i in range(n_test):
-    order_i = np.unique(order[i])
-    n_items_recalled[i] = len(order_i[~np.isnan(order_i)])
-prop_item_recalled = n_items_recalled / n_std
-
-pir_mu, pir_se = compute_stats(prop_item_recalled)
-print(f'%% items recalled = %.2f, se = %.2f' % (pir_mu, pir_se))
-
-
-mean_r_all_trials = [np.mean(log_r_) for log_r_ in log_r]
-r_mu, r_se = compute_stats(mean_r_all_trials)
-print(f'Average reward = %.2f, se = %.2f' % (r_mu, r_se))
-
-
-p_lure = np.sum(np.isnan(order)) / len(order.reshape(-1))
-print(f'Probability of lure recall is {p_lure}')
-
-recall_nonan = log_a[~np.isnan(log_a)]
-
-repeats = np.zeros(n_test)
-for i in range(n_test):
-    recalled_items_i = log_a[i][~np.isnan(log_a[i])]
-    repeats[i] = len(recalled_items_i) - len(np.unique(recalled_items_i))
-
-p_repeats = np.mean(repeats)
-print(f'Probability of repeats is {p_repeats}')
-
-
+''' compute p(1st recall) '''
 counter = Counter(order[:,0])
-recalls_1st = np.array([counter[i] for i in range(n_std)])
-
+recalls_1st = np.array([counter[i] for i in range(n_std_te)])
 f, ax = plt.subplots(1,1, figsize=(6, 4))
 ax.plot(recalls_1st / np.sum(recalls_1st))
 # ax.set_ylim([None, 1])
@@ -200,12 +207,30 @@ ax.set_title('Recall probability for the 1st item')
 sns.despine()
 
 
+''' compute mean performance '''
+n_items_recalled = np.empty(n_test, )
+for i in range(n_test):
+    order_i = np.unique(order[i])
+    n_items_recalled[i] = len(order_i[~np.isnan(order_i)])
+prop_item_recalled = n_items_recalled / n_std_te
+
+pir_mu, pir_se = compute_stats(prop_item_recalled)
+print(f'%% items recalled = %.2f, se = %.2f' % (pir_mu, pir_se))
+
+
+mean_r_all_trials = [np.mean(log_r_) for log_r_ in log_r]
+r_mu, r_se = compute_stats(mean_r_all_trials)
+print(f'Average reward = %.2f, se = %.2f' % (r_mu, r_se))
+
+
+
+
 '''MVPA decoding'''
 n_tr = 1000
 n_te = n_test - n_tr
 
-y_te_std_hat = np.zeros((n, n_tr, n_std))
-y_te_std = np.zeros((n, n_tr, n_std))
+y_te_std_hat = np.zeros((n, n_tr, n_std_te))
+y_te_std = np.zeros((n, n_tr, n_std_te))
 
 dec_acc = np.zeros(n)
 
@@ -227,15 +252,15 @@ for std_item_id in range(n):
     inwm_time_item_i_rs = np.reshape(inwm_time_item_i, (-1,))
 
     # split the data
-    x_tr = log_h_std_rs[:n_tr* n_std]
-    y_tr = inwm_time_item_i_rs[:n_tr* n_std]
-    x_te = log_h_std_rs[n_tr* n_std:]
+    x_tr = log_h_std_rs[:n_tr* n_std_te]
+    y_tr = inwm_time_item_i_rs[:n_tr* n_std_te]
+    x_te = log_h_std_rs[n_tr* n_std_te:]
 
     # fit model
     ridge_clfs[std_item_id] = RidgeClassifier().fit(x_tr, y_tr)
     # test the clf on the study phase test set
     y_te_std_hat_rs = ridge_clfs[std_item_id].predict(x_te)
-    y_te_std_hat[std_item_id] = np.reshape(y_te_std_hat_rs, (-1, n_std))
+    y_te_std_hat[std_item_id] = np.reshape(y_te_std_hat_rs, (-1, n_std_te))
     y_te_std[std_item_id] = inwm_time_item_i[n_tr:]
 
 # generalize the clf to the test phase
@@ -254,30 +279,30 @@ for std_item_id in range(n):
 
 '''helper func - decoding accuracy over time for different order info'''
 def compute_hit_by_order(ridge_hits, order_info):
-    dec_acc_dict = {i:[] for i in range(n_std)}
+    dec_acc_dict = {i:[] for i in range(n_std_te)}
     # loop over all test set examples
     for i in np.arange(n_te):
         # for each test set trial, loop over all studied items
         for std_o, item_id in enumerate(order_info[n_tr + i]):
-            if std_o >= n_std: # if std_o > n_std -> test phase buffer time
+            if std_o >= n_std_te: # if std_o > n_std_te -> test phase buffer time
                 break
             # whether the o-th studied item was a hit
             if np.isnan(item_id) or item_id == n:
                 continue
             dec_acc_dict[std_o].append(ridge_hits[int(item_id), i])
     # compute average for all studied order
-    dec_acc_mu = np.zeros((n_std, n_std))
-    dec_acc_se = np.zeros((n_std, n_std))
-    for o in range(n_std):
+    dec_acc_mu = np.zeros((n_std_te, n_std_te))
+    dec_acc_se = np.zeros((n_std_te, n_std_te))
+    for o in range(n_std_te):
         dec_acc_mu[o], dec_acc_se[o] = compute_stats(np.stack(dec_acc_dict[o]))
     return dec_acc_mu, dec_acc_se
 
 def plot_decoding_curves(dec_acc_mu, dec_acc_se, study_phase=True):
-    cpal = sns.color_palette("Spectral", n_colors = n_std)
+    cpal = sns.color_palette("Spectral", n_colors = n_std_te)
     f, ax = plt.subplots(1,1, figsize=(6, 4))
-    for o in range(n_std):
+    for o in range(n_std_te):
         ax.errorbar(
-            x=np.arange(o, n_std), y=dec_acc_mu[o, o:], yerr=dec_acc_se[o, o:],
+            x=np.arange(o, n_std_te), y=dec_acc_mu[o, o:], yerr=dec_acc_se[o, o:],
             color = cpal[o], marker='.'
         )
     sns.despine()
@@ -303,5 +328,5 @@ f, ax = plot_decoding_curves(dec_acc_mu, dec_acc_se, True)
 '''compute the same thing during the test phase'''
 # compare prediction to 1 since all items were presented
 ridge_hits_tst = y_te_tst_hat == 1
-dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_tst[:,:,:n_std], log_a)
+dec_acc_mu, dec_acc_se = compute_hit_by_order(ridge_hits_tst[:,:,:n_std_te], log_a)
 f, ax = plot_decoding_curves(dec_acc_mu, dec_acc_se, False)
