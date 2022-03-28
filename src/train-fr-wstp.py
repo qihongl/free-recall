@@ -15,22 +15,27 @@ from utils import to_sqpth, to_pth, to_np, to_sqnp, make_log_fig_dir, estimated_
 from vis import plot_learning_curve
 from stats import compute_stats
 
+# plotting param
 sns.set(style='white', palette='colorblind', context='talk')
+plt_win_size = 20
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', default='free-recall-stp', type=str)
 parser.add_argument('--subj_id', default=0, type=int)
-parser.add_argument('--n', default=48, type=int)
-parser.add_argument('--n_std', default=12, type=int)
+parser.add_argument('--n', default=40, type=int)
+parser.add_argument('--n_std', default=10, type=int)
 parser.add_argument('--v', default=3, type=int)
-parser.add_argument('--dim_hidden', default=256, type=int)
+parser.add_argument('--dim_hidden', default=128, type=int)
+# parser.add_argument('--noise_level', default=.02, type=int)
+parser.add_argument('--noise_level', default=0, type=int)
 parser.add_argument('--lr', default=3e-3, type=float)
 parser.add_argument('--beta', default=1, type=float)
-parser.add_argument('--beta_decay', default=.9, type=float)
-parser.add_argument('--beta_decay_freq', default=10000, type=float)
+parser.add_argument('--beta_decay', default=1, type=float)
+parser.add_argument('--beta_decay_freq', default=None, type=float)
 parser.add_argument('--n_epochs', default=100001, type=int)
 parser.add_argument('--reward', default=1, type=int)
-parser.add_argument('--penalty', default=-.25, type=float)
+parser.add_argument('--penalty', default=-1, type=float)
+parser.add_argument('--penalize_early_stop', default=True, type=bool)
 p = parser.parse_args()
 np.random.seed(p.subj_id)
 torch.manual_seed(p.subj_id)
@@ -63,7 +68,7 @@ for i in range(p.n_epochs):
     hc_t = agent.get_zero_states()
     # study phase
     for t, x_t_std in enumerate(X):
-        # x_t = torch.cat([x_t_std, torch.zeros(task.x_dim)])
+        hc_t = agent.add_normal_noise(hc_t, scale=p.noise_level)
         x_t = torch.cat([x_t_std, torch.zeros(task.x_dim), torch.zeros(1)])
         [_, _, _, hc_t], _ = agent.forward(x_t, hc_t)
 
@@ -74,10 +79,11 @@ for i in range(p.n_epochs):
     r_t = torch.zeros(1)
     for t in range(len_test_phase):
         # feed _, prev_recall_item, prev_reward
+        # hc_t = agent.add_normal_noise(hc_t, scale=p.noise_level)
         x_t = torch.cat([torch.zeros(task.x_dim), x_t_tst, r_t.view(1)])
         [a_t, pi_a_t, v_t, hc_t], _ = agent.forward(x_t, hc_t)
         # compute reward
-        r_t = task.get_reward(a_t)
+        r_t = task.get_reward(a_t, penalize_early_stop=p.penalize_early_stop)
         # compute loss
         rewards.append(r_t)
         values.append(v_t)
@@ -115,6 +121,13 @@ for i in range(p.n_epochs):
         fname = f'wts-{i}.pth'
         torch.save(agent.state_dict(), os.path.join(log_path, fname))
 
+    if i > plt_win_size and i % 10000 == 0:
+        # plot the learning curve
+        # print(np.shape(log_r[:i]))
+        tmp_ = np.array([np.mean(log_r_i) for log_r_i in log_r[:i]])
+        f, ax = plot_learning_curve(tmp_, window_size=plt_win_size, ylabel='avg reward')
+        f.savefig(os.path.join(fig_path, f'r-ep_{i}.png'))
+
     # compute ert
     time_took = time.time() - time_s
     if i == 0:
@@ -129,10 +142,7 @@ for i in range(p.n_epochs):
 
 '''figures'''
 # plot the learning curves
-w_size = 20
-f, ax = plot_learning_curve(np.mean(log_r,axis=1), window_size=w_size, ylabel='avg reward')
-f.savefig(os.path.join(fig_path, 'r.png'))
-f, ax = plot_learning_curve(log_loss_actor, window_size=w_size, ylabel='loss actor')
+f, ax = plot_learning_curve(log_loss_actor, window_size=plt_win_size, ylabel='loss actor')
 f.savefig(os.path.join(fig_path, 'loss-a.png'))
-f, ax = plot_learning_curve(log_loss_critic, window_size=w_size, ylabel='loss critic')
+f, ax = plot_learning_curve(log_loss_critic, window_size=plt_win_size, ylabel='loss critic')
 f.savefig(os.path.join(fig_path, 'loss-c.png'))

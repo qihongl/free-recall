@@ -72,7 +72,7 @@ class FreeRecall():
             stimuli = to_pth(stimuli)
         return stimuli
 
-    def get_reward(self, recalled_id):
+    def get_reward(self, recalled_id, penalize_early_stop=True):
         '''
         return reward/penalty if the model recalled some studied item / lure
 
@@ -92,15 +92,18 @@ class FreeRecall():
             if len(self.recalled_item_id) == len(self.studied_item_ids):
                 return to_pth(self.reward)
             else:
-                return to_pth(2 * self.penalty)
+                if penalize_early_stop:
+                    return to_pth(self.penalty)
+                else:
+                    return to_pth(0)
         # if recalled item is a lure, penalty
         if recalled_id not in self.studied_item_ids:
-            return to_pth(self.penalty)
+            return to_pth(self.penalty * 1.5)
         # here, recalled item is studied
         # if recalled item has been recalled
         if recalled_id in self.recalled_item_id:
             # penalize repeat
-            return to_pth(self.penalty)
+            return to_pth(self.penalty * 1.5)
         # if is studied but hasn't been recalled, reward the model
         else:
             self.recalled_item_id.append(recalled_id)

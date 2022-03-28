@@ -24,15 +24,17 @@ torch.manual_seed(subj_id)
 print(subj_id)
 
 # init task
-n = 48
-n_std_tr = 12
-n_std_te = 6
+n = 40
+n_std_tr = 10
+n_std_te = 10
 v_tr = 3
 v_te = 0
 reward = 1
-penalty = -.2
-dim_hidden = 256
-beta = .1
+penalty = -.5
+dim_hidden = 128
+beta = 1
+# noise_level = 0.025
+noise_level = 0
 
 task = FreeRecall(n_std=n_std_te, n=n, v=v_te, reward=reward, penalty=penalty)
 dim_input = task.x_dim * 2 + 1
@@ -48,7 +50,7 @@ fname = f'wts-{epoch_trained}.pth'
 agent = Agent(dim_input, dim_hidden, dim_output, beta)
 agent.load_state_dict(torch.load(os.path.join(log_path, fname)))
 
-# testingn
+# testing
 n_test = 2000
 len_test_phase = task.n_std + v_tr + 1
 # log_r = np.zeros((n_test, n_std_te))
@@ -66,6 +68,7 @@ for i in range(n_test):
     r_t = torch.zeros(1)
     hc_t = agent.get_zero_states()
     for t, x_t_std in enumerate(X):
+        hc_t = agent.add_normal_noise(hc_t, scale=noise_level)
         x_t = torch.cat([x_t_std, torch.zeros(task.x_dim), r_t])
         [_, _, _, hc_t], _ = agent.forward(x_t, hc_t)
         log_h_std[i, t] = to_sqnp(hc_t)
@@ -106,6 +109,7 @@ for i in range(n_test):
         stop_times[i] = int(stop_time[0])
         resp_i = resp[i][:int(stop_time[0])]
     else:
+        # stop_times[i] = len_test_phase
         resp_i = resp[i]
     # count the number of items that are not in the targets
     for resp_it in resp_i:
@@ -114,6 +118,7 @@ for i in range(n_test):
 
 n_lures_mu, n_lures_se = compute_stats(n_lures)
 stop_times_mu = np.nanmean(stop_times)
+
 
 # compute number of repeats for each trials
 repeats = np.zeros(n_test)
@@ -177,7 +182,7 @@ ax.set_ylabel('p')
 ax.set_title('Conditional response probability')
 sns.despine()
 
-''' compute recall probabilit arranged according to the studied order'''
+''' compute recall probabiliy arranged according to the studied order'''
 # order = order[:,0]
 # plot the serial position curve
 unique_recalls = np.concatenate([np.unique(order[i]) for i in range(n_test)])
@@ -188,7 +193,14 @@ spc_x = range(n_std_te)
 spc_y = recalls / n_test
 f, ax = plt.subplots(1,1, figsize=(6, 4))
 ax.plot(spc_y)
-# ax.set_ylim([None, 1])
+ax.set_ylim([0, 1])
+ax.set_xlabel('Position')
+ax.set_ylabel('p')
+ax.set_title('Recall probability')
+sns.despine()
+
+f, ax = plt.subplots(1,1, figsize=(6, 4))
+ax.plot(spc_y)
 ax.set_xlabel('Position')
 ax.set_ylabel('p')
 ax.set_title('Recall probability')
@@ -200,10 +212,17 @@ recalls_1st = np.array([counter[i] for i in range(n_std_te)])
 f, ax = plt.subplots(1,1, figsize=(6, 4))
 ax.plot(recalls_1st / np.sum(recalls_1st))
 # ax.set_ylim([None, 1])
-# ax.set_ylim([0, None])
+ax.set_ylim([0, None])
 ax.set_xlabel('Position')
 ax.set_ylabel('p')
-ax.set_title('Recall probability for the 1st item')
+ax.set_title('The distribution of the 1st recall')
+sns.despine()
+
+f, ax = plt.subplots(1,1, figsize=(6, 4))
+ax.plot(recalls_1st / np.sum(recalls_1st))
+ax.set_xlabel('Position')
+ax.set_ylabel('p')
+ax.set_title('The distribution of the 1st recall')
 sns.despine()
 
 
@@ -216,7 +235,6 @@ prop_item_recalled = n_items_recalled / n_std_te
 
 pir_mu, pir_se = compute_stats(prop_item_recalled)
 print(f'%% items recalled = %.2f, se = %.2f' % (pir_mu, pir_se))
-
 
 mean_r_all_trials = [np.mean(log_r_) for log_r_ in log_r]
 r_mu, r_se = compute_stats(mean_r_all_trials)

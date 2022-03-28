@@ -71,10 +71,11 @@ class GRU(nn.Module):
         a_t, prob_a_t = pick_action(pi_a_t)
         return a_t, prob_a_t, v_t
 
-    def get_random_init_states(self, scale=.1):
-        h_0 = torch.randn(1, 1, self.hidden_dim) * scale
-        return h_0
+    # @torch.no_grad()
+    def add_normal_noise(self, pattern, scale=.1):
+        return pattern + torch.randn(pattern.size()) * scale
 
+    @torch.no_grad()
     def get_zero_states(self):
         h_0 = torch.zeros(1, 1, self.hidden_dim)
         return h_0
